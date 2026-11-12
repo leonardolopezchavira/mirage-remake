@@ -3,7 +3,7 @@
 
 "Mi" drawn as shapes traced from the Mirage wordmark on a DSK-8 panel (heavy geometric
 capitals: vertical outer stems, a deep V, a square i-dot set well apart), the grey and red
-stripes from the same panel, and "SAMPLER" in the panel's small spaced white capitals.
+stripes from the same panel, and "VINTAGE DIGITAL SAMPLER" in the panel's small spaced white capitals.
 usage: make_icon.py <sans font for SAMPLER> <out dir>
 """
 import sys
@@ -66,15 +66,22 @@ def icon(scale=4):
     ry = gy + 30 * scale
     d.rectangle([lx0, ry, lx1, ry + 22 * scale], fill=RED)
 
-    # SAMPLER, small spaced capitals
-    fs = ImageFont.truetype(SANS, 58 * scale)
-    word, spacing = "SAMPLER", 22 * scale
-    widths = [d.textlength(ch, font=fs) for ch in word]
-    total = sum(widths) + spacing * (len(word) - 1)
+    # Small spaced capitals under the stripes, fitted to the panel width
+    word = "VINTAGE  DIGITAL  SAMPLER"
+    size, maxw = 58, 700 * scale
+    while True:
+        fs = ImageFont.truetype(SANS, size * scale)
+        spacing = size * 0.38 * scale
+        widths = [d.textlength(ch, font=fs) for ch in word]
+        total = sum(widths) + spacing * (len(word) - 1)
+        if total <= maxw or size <= 20:
+            break
+        size -= 1
     x = (W - total) / 2
-    y = ry + 22 * scale + 52 * scale
+    y = ry + 22 * scale + (52 + (58 - size) * 0.5) * scale
     for ch, w in zip(word, widths):
-        d.text((x, y), ch, font=fs, fill=WHITE)
+        if ch != " ":
+            d.text((x, y), ch, font=fs, fill=WHITE)
         x += w + spacing
 
     # clip everything to the body (stripes run to the edges)
