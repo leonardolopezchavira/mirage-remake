@@ -48,6 +48,9 @@ Behind the scenes that is roughly 6 seconds of machine time, run faster than rea
   **LOAD LOWER** (or **LOAD UPPER**), then 1–3, then **ENTER**.
 - **Edit:** **PARAM**, two digits, **VALUE**, then ▲ ▼ or digits. The parameter card is in
   `docs/` (see the Mirage manuals).
+- **Tuning:** at start-up the app sets Master Tune (parameter 21) to 47 instead of the
+  OS default of 50, which plays about 14 cents sharp on every key; 47 measures within
+  ±2 cents of A440 across the keyboard. Each step is about 5 cents.
 - Computer keys in the editor: digits, Enter, Esc (Cancel), ↑ ↓, P (Param), V (Value).
 - **Saving:** when the Mirage writes to a disk (save sound / config / format), the image is
   saved to `~/Library/Application Support/Mirage/Disks`. Copies of bundled disks go there too.

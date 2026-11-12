@@ -27,6 +27,18 @@ void MirageEngine::boot()
         idle = (!m_.fdc().motorOn() && lit) ? idle + 1 : 0;
     }
     m_.run(int64_t(0.2 * Mirage::kCpuHz));
+
+    // Master Tune (parameter 21) defaults to 50, which plays about 14 cents sharp of A440
+    // on every key. 47 is the closest setting (measured within +-2 cents across the
+    // keyboard), so set it through the front panel as a player would:
+    // PARAM 2 1 VALUE, three times Off/Down, then back to PARAM.
+    for (int key : {Mirage::Param, Mirage::K2, Mirage::K1, Mirage::Value,
+                    Mirage::Down, Mirage::Down, Mirage::Down, Mirage::Param}) {
+        m_.setKey(key, true);
+        m_.run(int64_t(0.08 * Mirage::kCpuHz));
+        m_.setKey(key, false);
+        m_.run(int64_t(0.08 * Mirage::kCpuHz));
+    }
     m_.fdc().clearDirty();
 }
 
