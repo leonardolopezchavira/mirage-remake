@@ -36,6 +36,8 @@ jobs:
           lipo build/bin/Mirage.app/Contents/MacOS/Mirage -verify_arch arm64 x86_64
           plutil -lint build/bin/Mirage.app/Contents/Info.plist
           test -f build/bin/Mirage.app/Contents/Resources/Disks/Factory/A1.img
+          test -f build/bin/Mirage.app/Contents/Resources/Mirage.icns
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" build/bin/Mirage.app/Contents/Info.plist
       - name: Package
         run: tools/package.sh build Mirage-macOS-universal.zip
       - name: Validate the packaged Audio Unit

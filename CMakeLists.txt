@@ -93,6 +93,10 @@ if(MIRAGE_BUILD_PLUGIN)
       MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
       MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
     mirage_copy_disks(Mirage-jack ${CMAKE_BINARY_DIR}/bin/Mirage.app/Contents/Resources/Disks)
+    # App icon (resources/icon, drawn by tools/make_icon.py)
+    add_custom_command(TARGET Mirage-jack POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/resources/icon/Mirage.icns
+              ${CMAKE_BINARY_DIR}/bin/Mirage.app/Contents/Resources/Mirage.icns)
   elseif(TARGET Mirage-jack)
     mirage_copy_disks(Mirage-jack ${CMAKE_BINARY_DIR}/bin/Disks)
   endif()
