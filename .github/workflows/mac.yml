@@ -46,6 +46,7 @@ jobs:
           killall -9 AudioComponentRegistrar || true
           auval -v aumu Mrge MRmk
       - uses: actions/upload-artifact@v4
+        continue-on-error: true   # the release below is the real delivery
         with:
           name: Mirage-macOS-universal
           path: Mirage-macOS-universal.zip
