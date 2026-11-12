@@ -43,7 +43,8 @@ public:
     void setSampleRate(double fs);
     // Audio thread.
     void midiByte(uint8_t b) { m_.midiIn(b); }
-    void process(float* out, int frames);   // mono
+    // mono out; `in` (optional) is the mono audio input at the host rate
+    void process(float* out, int frames, const float* in = nullptr);
 
     // Editor thread (thread-safe).
     void setPanelKey(int key, bool down);
@@ -58,6 +59,8 @@ public:
     void setDiskPath(const std::string& p) { std::lock_guard<std::mutex> l(nameLock_); diskPath_ = p; }
 
     std::atomic<float> volume{0.8f};
+    std::atomic<float> inputPeak{0.0f};     // host input peak (editor meter; the editor resets it)
+    std::atomic<bool> samplingNow{false};
     std::atomic<bool> fastDisk{true};
     std::atomic<int> diskTurbo{8};
 
@@ -72,7 +75,8 @@ private:
     struct Biquad { double b0, b1, b2, a1, a2, z1 = 0, z2 = 0;
         float run(float x) { double y = b0 * x + z1; z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y; return float(y); } };
     Biquad aa_[4];          // 8th-order Butterworth anti-alias filter at the analog rate
-    std::vector<float> scratch_;
+    std::vector<float> scratch_, inScratch_;
+    float lastIn_ = 0.0f;
 
     ByteRing uiMidi_;
     std::atomic<uint32_t> keys_{0}, appliedKeys_{0};

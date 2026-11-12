@@ -48,7 +48,7 @@ protected:
 private:
     std::unique_ptr<mirage::MirageEngine> engine_;
     std::vector<DiskEntry> disks_;
-    std::vector<float> mono_;
+    std::vector<float> mono_, monoIn_;
     void scanDisks();
 };
 

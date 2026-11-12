@@ -131,14 +131,14 @@ uint8_t Mirage::displaySegments(int digit) const
 
 uint8_t Mirage::adc()
 {
-    // VIA PB2-3 select the A/D input: 0 = compressed input, 1 = line input (both mixed with
-    // the instrument's own output), 2 = pitch wheel, 3 = mod wheel.
+    // VIA PB2-3 select the A/D input: 0 = compressed (mic) input, 1 = line input, 2 = pitch
+    // wheel, 3 = mod wheel. The audio input reaches the converter through VCF 7 (the
+    // sampling "input filter", see analogStep()), mixed with the other filters' outputs.
     switch ((portB_ >> 2) & 3) {
     case 2: return pitch_;
     case 3: return mod_;
     default: {
-        const float s = audioIn_ + 3.0f * mix_;
-        const int v = int(std::lround(128.0f + 100.0f * s));
+        const int v = int(std::lround(128.0f + 300.0f * mix_));
         return uint8_t(std::clamp(v, 0, 255));
     }
     }
@@ -155,11 +155,25 @@ void Mirage::analogStep()
 {
     // A little analog noise at each filter input (the real VCFs never sit at exactly zero,
     // which is what lets them start self-oscillating during the boot-time tuning).
+    if (inBuf_ && inPos_ < inLen_) audioIn_ = inBuf_[inPos_++];
+
+    // While sampling, the audio input feeds VCF 7, which the OS sets up as the anti-alias
+    // "input filter" (parameter 74). VIA PB2-3 pick the source: 01 = line input,
+    // 00 = microphone input with its compressor (parameter 75).
+    float in7 = 0;
+    if (sampling()) {
+        const int src = (portB_ >> 2) & 3;
+        if (src == 1) in7 = audioIn_;
+        else if (src == 0) in7 = 0.8f * std::tanh(4.0f * audioIn_);
+        const float a = std::fabs(in7);
+        if (a > inLevel_) inLevel_ = a;
+    }
+
     float sum = 0;
     for (int i = 0; i < 8; ++i) {
         noise_ = noise_ * 1664525u + 1013904223u;
         const float n = (int32_t(noise_) >> 8) * (1.0f / 8388608.0f) * 1e-4f;
-        sum += vcf_[i].process(chanIn_[i] + n);
+        sum += vcf_[i].process(chanIn_[i] + n + (i == 7 ? in7 : 0.0f));
     }
     mix_ = sum;
     outQ_.push_back(sum);
@@ -193,11 +207,15 @@ void Mirage::run(int64_t cycles)
     outQ_.clear();
 }
 
-void Mirage::render(float* out, int frames)
+void Mirage::render(float* out, int frames, const float* in)
 {
+    inBuf_ = in;
+    inPos_ = 0;
+    inLen_ = in ? frames : 0;
     while (int(outQ_.size()) < frames) tick(cpu_.step());
     std::copy(outQ_.begin(), outQ_.begin() + frames, out);
     outQ_.erase(outQ_.begin(), outQ_.begin() + frames);
+    inBuf_ = nullptr;
 }
 
 } // namespace mirage

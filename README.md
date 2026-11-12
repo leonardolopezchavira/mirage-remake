@@ -70,10 +70,25 @@ xattr -dr com.apple.quarantine /Applications/Mirage.app ~/Library/Audio/Plug-Ins
   ~/Library/Audio/Plug-Ins/VST3/Mirage.vst3 ~/Library/Audio/Plug-Ins/CLAP/Mirage.clap
 ```
 
-## Not done yet
+### Sampling
 
-- **Sampling.** The A/D path exists (it is what the filter tuning uses), but audio input from
-  the host or the Mac's input is not connected yet.
+1. **Choose the input** (standalone app): **Mirage → Settings… (⌘,)**, then *Sampling input*
+   (any audio device, including interfaces) and *Input channel* (a single input, or a pair mixed
+   to mono). macOS asks once for microphone permission. In a DAW, the plug-in samples
+   whatever the host sends to its audio input. The **INPUT** meter on the panel shows the
+   signal arriving.
+2. **Line or mic:** parameter 75 (on = line level, off = mic with the Mirage's compressor).
+   The input filter is parameter 74, the threshold 76, the sampling rate 73.
+3. **SAMPLE LOWER** (or UPPER). "SL" flashes, then the display becomes the Mirage's level
+   meter. Adjust the source level until the top bar barely flickers.
+4. **ENTER**, then play the sound. Recording starts when the signal crosses the threshold,
+   lasts about 2 seconds, and ends with "SF". Play it back on that half of the keyboard
+   (the original pitch is on the E below middle C).
+
+As on the hardware, the input passes through voice 7's filter (the input filter) into the
+8-bit converter, paced by the VIA timer at the sampling rate.
+
+## Not done yet
 - **The DSK-8 keyboard controller** (R6500/11) is not emulated. Play from MIDI, as with the
   DMS-8 rack.
 - **Plug-in state** stores the inserted disk's path only, not the full machine state. A sound

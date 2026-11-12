@@ -29,6 +29,7 @@ public:
     uint8_t portBOut() const { return uint8_t((orb_ & ddrb_) | ~ddrb_); }
     uint8_t portAOut() const { return uint8_t((ora_ & ddra_) | ~ddra_); }
     bool pb7() const { return pb7_; }
+    bool timer1IrqEnabled() const { return ier_ & IFR_T1; }
 
 private:
     uint8_t ora_ = 0, orb_ = 0, ddra_ = 0, ddrb_ = 0;

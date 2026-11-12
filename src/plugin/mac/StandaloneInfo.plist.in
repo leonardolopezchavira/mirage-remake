@@ -31,6 +31,6 @@
 	<key>NSRequiresAquaSystemAppearance</key>
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Mirage only plays audio; it does not record.</string>
+	<string>Mirage samples from the audio input you choose in Settings, like the original instrument's sampling input.</string>
 </dict>
 </plist>

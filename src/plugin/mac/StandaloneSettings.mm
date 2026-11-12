@@ -4,8 +4,9 @@
 // has no menu bar and no settings: it always opens the default output at 48 kHz and no MIDI
 // input. This file gives the app
 //   - a standard app menu (About, Settings… ⌘, , Hide, Quit ⌘Q),
-//   - an Audio/MIDI Settings window: output device, sample rate, buffer size and which MIDI
-//     inputs play Mirage, with a Rescan button for devices plugged in later,
+//   - an Audio/MIDI Settings window: output device, sample rate, buffer size, the audio input
+//     used for sampling (any device, any channel or channel pair) and which MIDI inputs play
+//     Mirage, with a Rescan button for devices plugged in later,
 //   - and restores those choices at launch (NSUserDefaults, domain
 //     com.github.leonardolopezchavira.mirage).
 // The device and MIDI control itself is in patches/dpf-standalone-settings.patch.
@@ -27,6 +28,10 @@ static NSString* const kDeviceKey = @"AudioOutputDevice";
 static NSString* const kSampleRateKey = @"SampleRate";
 static NSString* const kBufferSizeKey = @"BufferSize";
 static NSString* const kDisabledMidiKey = @"DisabledMIDIInputs";
+static NSString* const kInputDeviceKey = @"AudioInputDevice";      // absent = no input
+static NSString* const kInputChannelKey = @"AudioInputChannel";    // first channel, 0-based
+static NSString* const kInputChannelsKey = @"AudioInputChannels";  // 1 or 2
+static NSString* const kNoInput = @"\x01none";
 
 static NSString* toNS(const std::string& s) {
     NSString* result = [NSString stringWithUTF8String:s.c_str()];
@@ -61,6 +66,9 @@ static NSTextField* makeLabel(NSString* text) {
 @property(strong) NSPopUpButton* devicePopup;
 @property(strong) NSPopUpButton* ratePopup;
 @property(strong) NSPopUpButton* bufferPopup;
+@property(strong) NSPopUpButton* inputPopup;
+@property(strong) NSPopUpButton* channelPopup;
+@property(strong) NSTextField* inputStatus;
 @property(strong) NSStackView* midiStack;
 @property(strong) NSTextField* statusLabel;
 + (instancetype)shared;
@@ -106,6 +114,14 @@ static NSTextField* makeLabel(NSString* text) {
     const NSInteger rate = [defaults integerForKey:kSampleRateKey];
     if (rate >= 44100 && static_cast<unsigned>(rate) != dpf::getCurrentSampleRate())
         dpf::requestSampleRateChange(static_cast<unsigned>(rate));
+
+    // Audio input for sampling (only when one was chosen: opening it asks for microphone access)
+    NSString* input = [defaults stringForKey:kInputDeviceKey];
+    if (input != nil && ![input isEqualToString:kNoInput]) {
+        const NSInteger ch = [defaults integerForKey:kInputChannelKey];
+        const NSInteger n = [defaults integerForKey:kInputChannelsKey];
+        dpf::requestAudioInputDevice(input.UTF8String, static_cast<unsigned>(MAX(ch, 0)), n == 1 ? 1u : 2u);
+    }
 
     const NSInteger frames = [defaults integerForKey:kBufferSizeKey];
     if (frames > 0 && static_cast<unsigned>(frames) != dpf::getBufferSize() &&
@@ -186,7 +202,7 @@ static NSTextField* makeLabel(NSString* text) {
 }
 
 - (void)buildPanel {
-    NSPanel* panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 460, 300)
+    NSPanel* panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 480, 400)
                                                 styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
                                                   backing:NSBackingStoreBuffered
                                                     defer:YES];
@@ -204,6 +220,15 @@ static NSTextField* makeLabel(NSString* text) {
     self.bufferPopup = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
     self.bufferPopup.target = self;
     self.bufferPopup.action = @selector(bufferChanged:);
+    self.inputPopup = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+    self.inputPopup.target = self;
+    self.inputPopup.action = @selector(inputChanged:);
+    self.channelPopup = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+    self.channelPopup.target = self;
+    self.channelPopup.action = @selector(inputChanged:);
+    self.inputStatus = [NSTextField wrappingLabelWithString:@""];
+    self.inputStatus.textColor = NSColor.secondaryLabelColor;
+    self.inputStatus.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
     self.statusLabel = [NSTextField labelWithString:@""];
     self.statusLabel.textColor = NSColor.secondaryLabelColor;
     self.statusLabel.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
@@ -213,6 +238,9 @@ static NSTextField* makeLabel(NSString* text) {
         @[ makeLabel(@"Sample rate:"), self.ratePopup ],
         @[ makeLabel(@"Buffer size:"), self.bufferPopup ],
         @[ [NSGridCell emptyContentView], self.statusLabel ],
+        @[ makeLabel(@"Sampling input:"), self.inputPopup ],
+        @[ makeLabel(@"Input channel:"), self.channelPopup ],
+        @[ [NSGridCell emptyContentView], self.inputStatus ],
     ]];
     audioGrid.rowSpacing = 8;
     audioGrid.columnSpacing = 8;
@@ -296,7 +324,57 @@ static NSTextField* makeLabel(NSString* text) {
     else
         self.statusLabel.stringValue = @"Audio output is not running.";
 
+    [self refreshInput];
     [self refreshMidi];
+}
+
+- (void)refreshInput {
+    [self.inputPopup removeAllItems];
+    NSMenuItem* none = [[NSMenuItem alloc] initWithTitle:@"None" action:nil keyEquivalent:@""];
+    none.representedObject = kNoInput;
+    [self.inputPopup.menu addItem:none];
+    NSMenuItem* systemDefault = [[NSMenuItem alloc] initWithTitle:@"System Default" action:nil keyEquivalent:@""];
+    systemDefault.representedObject = @"";
+    [self.inputPopup.menu addItem:systemDefault];
+    const bool open = dpf::getAudioInputChannelCount() > 0;
+    const std::string current = dpf::getAudioInputDeviceName();
+    NSMenuItem* selected = open ? (current.empty() ? systemDefault : nil) : none;
+    for (const std::string& name : dpf::getAudioInputDeviceNames()) {
+        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:deviceTitle(name) action:nil keyEquivalent:@""];
+        item.representedObject = toNS(name);
+        item.toolTip = toNS(name);
+        [self.inputPopup.menu addItem:item];
+        if (open && !current.empty() && name == current) selected = item;
+    }
+    [self.inputPopup selectItem:selected != nil ? selected : none];
+
+    // channels of the selected device: each one alone (mono), and pairs mixed to mono
+    [self.channelPopup removeAllItems];
+    NSString* device = self.inputPopup.selectedItem.representedObject;
+    const unsigned count = [device isEqualToString:kNoInput] ? 0u
+                           : dpf::getAudioInputDeviceChannelCount(device.UTF8String);
+    for (unsigned c = 0; c < count; ++c) {
+        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"Input %u", c + 1]
+                                                      action:nil keyEquivalent:@""];
+        item.tag = static_cast<NSInteger>(c * 10 + 1);
+        [self.channelPopup.menu addItem:item];
+    }
+    for (unsigned c = 0; c + 1 < count; c += 2) {
+        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"Inputs %u + %u (mixed)", c + 1, c + 2]
+                                                      action:nil keyEquivalent:@""];
+        item.tag = static_cast<NSInteger>(c * 10 + 2);
+        [self.channelPopup.menu addItem:item];
+    }
+    if (open) [self.channelPopup selectItemWithTag:static_cast<NSInteger>(dpf::getAudioInputChannel() * 10 +
+                                                                          dpf::getAudioInputChannelCount())];
+    self.channelPopup.enabled = count > 0;
+
+    if (open)
+        self.inputStatus.stringValue = @"To sample: SAMPLE LOWER or UPPER, check the level on the display, "
+                                       @"press ENTER, then play the sound.";
+    else
+        self.inputStatus.stringValue = @"Choose the device and channel to sample from. "
+                                       @"macOS asks once for permission to use the input.";
 }
 
 - (void)refreshMidi {
@@ -337,6 +415,35 @@ static NSTextField* makeLabel(NSString* text) {
             [NSUserDefaults.standardUserDefaults removeObjectForKey:kDeviceKey];
     } else {
         [self showFailure:[NSString stringWithFormat:@"“%@” could not be opened.", popup.selectedItem.title]];
+    }
+    [self refresh];
+}
+
+- (void)inputChanged:(NSPopUpButton*)popup {
+    NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+    NSString* device = self.inputPopup.selectedItem.representedObject;
+    if ([device isEqualToString:kNoInput]) {
+        dpf::disableAudioInput();
+        [defaults setObject:kNoInput forKey:kInputDeviceKey];
+        [self refresh];
+        return;
+    }
+    unsigned channel = 0, channels = 1;
+    if (popup == self.channelPopup && self.channelPopup.selectedItem != nil) {
+        channel = static_cast<unsigned>(self.channelPopup.selectedItem.tag / 10);
+        channels = static_cast<unsigned>(self.channelPopup.selectedItem.tag % 10);
+    } else {
+        // a new device: its first two inputs mixed, or its only input
+        channels = dpf::getAudioInputDeviceChannelCount(device.UTF8String) >= 2 ? 2u : 1u;
+    }
+    if (dpf::requestAudioInputDevice(device.UTF8String, channel, channels)) {
+        [defaults setObject:device forKey:kInputDeviceKey];
+        [defaults setInteger:channel forKey:kInputChannelKey];
+        [defaults setInteger:channels forKey:kInputChannelsKey];
+    } else {
+        [self showFailure:[NSString stringWithFormat:@"“%@” could not be opened for input. "
+                                                     @"Check System Settings › Privacy & Security › Microphone.",
+                                                     self.inputPopup.selectedItem.title]];
     }
     [self refresh];
 }

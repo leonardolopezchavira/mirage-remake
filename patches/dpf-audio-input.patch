@@ -1,0 +1,251 @@
+diff --git a/distrho/DistrhoStandaloneUtils.hpp b/distrho/DistrhoStandaloneUtils.hpp
+index 4e0a8559..4fdbb662 100644
+--- a/distrho/DistrhoStandaloneUtils.hpp
++++ b/distrho/DistrhoStandaloneUtils.hpp
+@@ -109,6 +109,18 @@ std::vector<std::string> getDisabledMIDIInputs();
+ /** Every other input is connected (when MIDI is enabled), including ones that appear later. */
+ bool setDisabledMIDIInputs(const std::vector<std::string>& names);
+ 
++/* mirage-remake additions: audio input from a chosen device and channel(s).
++   An empty device name is the system default input. `channel` is the first input channel
++   (0-based); `channels` is 1 (mono, copied to both plugin inputs) or 2. */
++std::vector<std::string> getAudioInputDeviceNames();
++uint getAudioInputDeviceChannelCount(const char* name);
++std::string getAudioInputDeviceName();
++uint getAudioInputChannel();
++uint getAudioInputChannelCount();
++bool requestAudioInputDevice(const char* name, uint channel, uint channels);
++/** Closes the input again (the output keeps playing). */
++bool disableAudioInput();
++
+ /** @} */
+ 
+ // -----------------------------------------------------------------------------------------------------------
+diff --git a/distrho/src/jackbridge/JackBridge.cpp b/distrho/src/jackbridge/JackBridge.cpp
+index 7c8b900e..1f3cb4e0 100644
+--- a/distrho/src/jackbridge/JackBridge.cpp
++++ b/distrho/src/jackbridge/JackBridge.cpp
+@@ -2507,6 +2507,15 @@ std::vector<std::string> getMIDIInputNames() { SQ8L_NATIVE(getMIDIInputNames(),
+ std::vector<std::string> getDisabledMIDIInputs() { SQ8L_NATIVE(getDisabledMIDIInputs(), {}) }
+ bool setDisabledMIDIInputs(const std::vector<std::string>& names) { SQ8L_NATIVE(setDisabledMIDIInputs(names), false) }
+ 
++std::vector<std::string> getAudioInputDeviceNames() { SQ8L_NATIVE(getAudioInputDeviceNames(), {}) }
++uint getAudioInputDeviceChannelCount(const char* const name) { SQ8L_NATIVE(getAudioInputDeviceChannelCount(name), 0) }
++std::string getAudioInputDeviceName() { SQ8L_NATIVE(getAudioInputDeviceName(), {}) }
++uint getAudioInputChannel() { SQ8L_NATIVE(getAudioInputChannel(), 0) }
++uint getAudioInputChannelCount() { SQ8L_NATIVE(getAudioInputChannelCount(), 0) }
++bool requestAudioInputDevice(const char* const name, const uint channel, const uint channels)
++{ SQ8L_NATIVE(requestAudioInputDevice(name, channel, channels), false) }
++bool disableAudioInput() { SQ8L_NATIVE(disableAudioInput(), false) }
++
+ #undef SQ8L_NATIVE
+ 
+ END_NAMESPACE_DISTRHO
+diff --git a/distrho/src/jackbridge/NativeBridge.hpp b/distrho/src/jackbridge/NativeBridge.hpp
+index 5f6f26e4..be2f6a19 100644
+--- a/distrho/src/jackbridge/NativeBridge.hpp
++++ b/distrho/src/jackbridge/NativeBridge.hpp
+@@ -169,6 +169,14 @@ struct NativeBridge {
+     virtual std::vector<std::string> getMIDIInputNames() { return {}; }
+     virtual std::vector<std::string> getDisabledMIDIInputs() const { return {}; }
+     virtual bool setDisabledMIDIInputs(const std::vector<std::string>&) { return false; }
++    // mirage-remake: audio input device and channel selection
++    virtual std::vector<std::string> getAudioInputDeviceNames() { return {}; }
++    virtual uint getAudioInputDeviceChannelCount(const char*) { return 0; }
++    virtual std::string getAudioInputDeviceName() const { return {}; }
++    virtual uint getAudioInputChannel() const { return 0; }
++    virtual uint getAudioInputChannelCount() const { return 0; }
++    virtual bool requestAudioInputDevice(const char*, uint, uint) { return false; }
++    virtual bool disableAudioInput() { return false; }
+ 
+     uint32_t getBufferSize() const noexcept
+     {
+diff --git a/distrho/src/jackbridge/RtAudioBridge.hpp b/distrho/src/jackbridge/RtAudioBridge.hpp
+index e6a60b55..08497e78 100644
+--- a/distrho/src/jackbridge/RtAudioBridge.hpp
++++ b/distrho/src/jackbridge/RtAudioBridge.hpp
+@@ -76,6 +76,13 @@ struct RtAudioBridge : NativeBridge {
+     std::string nextOutputDeviceName;  // device the next _open() uses
+     uint nextSampleRate = 0;           // 0 = 48 kHz, DPF's fixed rate
+     std::vector<std::string> disabledMidiIns;
++    // mirage-remake: audio input selection
++    std::string inputDeviceName;       // device in use, empty = system default
++    std::string nextInputDeviceName;
++    uint inputChannel = 0, nextInputChannel = 0;   // first channel, 0-based
++    uint inputChannels = 2, nextInputChannels = 2; // 1 = mono (copied to both inputs)
++    float* monoCopy = nullptr;                     // second input when mono
++    uint monoCopySize = 0;
+ 
+     RtAudioBridge()
+     {
+@@ -348,6 +355,97 @@ struct RtAudioBridge : NativeBridge {
+         return false;
+     }
+ 
++    // mirage-remake -----------------------------------------------------------------------
++
++    std::vector<std::string> getAudioInputDeviceNames() override
++    {
++        std::vector<std::string> names;
++        _forEachInputDevice([&](uint, const RtAudio::DeviceInfo& info) {
++            names.push_back(info.name);
++            return false;
++        });
++        return names;
++    }
++
++    uint getAudioInputDeviceChannelCount(const char* const deviceName) override
++    {
++        const std::string want = deviceName != nullptr ? deviceName : "";
++        uint channels = 0;
++        _forEachInputDevice([&](uint, const RtAudio::DeviceInfo& info) {
++            if (want.empty() ? info.isDefaultInput : info.name == want) {
++                channels = info.inputChannels;
++                return true;
++            }
++            return false;
++        });
++        return channels;
++    }
++
++    std::string getAudioInputDeviceName() const override { return inputDeviceName; }
++    uint getAudioInputChannel() const override { return inputChannel; }
++    uint getAudioInputChannelCount() const override { return captureEnabled ? inputChannels : 0; }
++
++    bool requestAudioInputDevice(const char* const deviceName, const uint channel, const uint channels) override
++    {
++       #if DISTRHO_PLUGIN_NUM_INPUTS > 0
++        const std::string oldName = nextInputDeviceName;
++        const uint oldChannel = nextInputChannel, oldChannels = nextInputChannels;
++        const bool oldCapture = captureEnabled;
++        nextInputDeviceName = deviceName != nullptr ? deviceName : "";
++        nextInputChannel = channel;
++        nextInputChannels = channels == 1 ? 1 : 2;
++        captureEnabled = true;
++        if (_reopen(outputDeviceName, nextSampleRate, bufferSize) && captureEnabled)
++            return true;
++        nextInputDeviceName = oldName;
++        nextInputChannel = oldChannel;
++        nextInputChannels = oldChannels;
++        captureEnabled = oldCapture;
++        _reopen(outputDeviceName, nextSampleRate, bufferSize);
++        return false;
++       #else
++        (void)deviceName; (void)channel; (void)channels;
++        return false;
++       #endif
++    }
++
++    bool disableAudioInput() override
++    {
++        if (!captureEnabled)
++            return true;
++        captureEnabled = false;
++        return _reopen(outputDeviceName, nextSampleRate, bufferSize);
++    }
++
++    template <typename Fn>
++    void _forEachInputDevice(Fn fn)
++    {
++        RtAudio* rtAudio = handle;
++        ScopedPointer<RtAudio> temporary;
++        if (rtAudio == nullptr)
++        {
++            try {
++                temporary = new RtAudio(RtAudio::RTAUDIO_API_TYPE);
++            } DISTRHO_SAFE_EXCEPTION_RETURN("new RtAudio()",);
++            rtAudio = temporary;
++        }
++        uint count = 0;
++        try {
++            count = rtAudio->getDeviceCount();
++        } DISTRHO_SAFE_EXCEPTION_RETURN("getDeviceCount()",);
++        for (uint i = 0; i < count; ++i)
++        {
++            RtAudio::DeviceInfo info;
++            try {
++                info = rtAudio->getDeviceInfo(i);
++            } catch (...) {
++                continue;
++            }
++            if (info.probed && info.inputChannels >= 1 && fn(i, info))
++                return;
++        }
++    }
++
+     // Calls fn(index, info) for every device with a stereo output until fn returns true.
+     template <typename Fn>
+     void _forEachOutputDevice(Fn fn)
+@@ -452,6 +550,36 @@ struct RtAudioBridge : NativeBridge {
+         {
+             inParams.deviceId = rtAudio->getDefaultInputDevice();
+             inParams.nChannels = DISTRHO_PLUGIN_NUM_INPUTS_2;
++            // mirage-remake: the input device, first channel and channel count chosen by name
++            uint available = 0;
++            {
++                bool found = false;
++                uint count = 0;
++                try {
++                    count = rtAudio->getDeviceCount();
++                } DISTRHO_SAFE_EXCEPTION_RETURN("rtAudio->getDeviceCount()", false);
++                for (uint i = 0; i < count && !found; ++i)
++                {
++                    try {
++                        const RtAudio::DeviceInfo info = rtAudio->getDeviceInfo(i);
++                        if (!info.probed || info.inputChannels < 1)
++                            continue;
++                        if (nextInputDeviceName.empty() ? info.isDefaultInput : info.name == nextInputDeviceName)
++                        {
++                            inParams.deviceId = i;
++                            available = info.inputChannels;
++                            found = true;
++                        }
++                    } catch (...) {}
++                }
++                if (!found)
++                    return false;
++            }
++            if (nextInputChannel >= available)
++                return false;
++            inParams.firstChannel = nextInputChannel;
++            inParams.nChannels = std::min(nextInputChannels, std::min<uint>(available - nextInputChannel,
++                                                                             DISTRHO_PLUGIN_NUM_INPUTS_2));
+             inParamsPtr = &inParams;
+         }
+        #endif
+@@ -517,6 +645,20 @@ struct RtAudioBridge : NativeBridge {
+         bufferSize = rtAudioBufferFrames;
+         sampleRate = handle->getStreamSampleRate();
+         outputDeviceName = tryingAgain == nullptr ? nextOutputDeviceName : std::string();
++       #if DISTRHO_PLUGIN_NUM_INPUTS > 0
++        if (withInput)
++        {
++            inputDeviceName = nextInputDeviceName;
++            inputChannel = nextInputChannel;
++            inputChannels = inParams.nChannels;
++            if (monoCopySize < bufferSize)
++            {
++                delete[] monoCopy;
++                monoCopy = new float[bufferSize * 4];
++                monoCopySize = bufferSize * 4;
++            }
++        }
++       #endif
+         // sq80-remake: the MIDI ring buffers survive a reopen (createBuffer would assert)
+        #if DISTRHO_PLUGIN_WANT_MIDI_INPUT || DISTRHO_PLUGIN_WANT_MIDI_OUTPUT
+         allocBuffers(!withInput, !midiUsed);
+@@ -551,6 +693,14 @@ struct RtAudioBridge : NativeBridge {
+         {
+             for (uint i=0; i<DISTRHO_PLUGIN_NUM_INPUTS_2; ++i)
+                 self->audioBuffers[i] = insPtr + (i * numFrames);
++           #if DISTRHO_PLUGIN_NUM_INPUTS > 1
++            // mirage-remake: a mono input feeds both plugin inputs
++            if (self->inputChannels == 1 && self->monoCopy != nullptr && numFrames <= self->monoCopySize)
++            {
++                std::memcpy(self->monoCopy, insPtr, sizeof(float) * numFrames);
++                self->audioBuffers[1] = self->monoCopy;
++            }
++           #endif
+         }
+        #endif
+ 

@@ -244,9 +244,11 @@ void MiragePlugin::setState(const char* key, const char* value)
     }
 }
 
-void MiragePlugin::run(const float**, float** outputs, uint32_t frames, const MidiEvent* ev, uint32_t evCount)
+void MiragePlugin::run(const float** inputs, float** outputs, uint32_t frames, const MidiEvent* ev, uint32_t evCount)
 {
     if (mono_.size() < frames) mono_.resize(frames);
+    if (monoIn_.size() < frames) monoIn_.resize(frames);
+    for (uint32_t i = 0; i < frames; ++i) monoIn_[i] = 0.5f * (inputs[0][i] + inputs[1][i]);
     uint32_t pos = 0, e = 0;
     while (pos < frames) {
         while (e < evCount && ev[e].frame <= pos) {
@@ -255,7 +257,7 @@ void MiragePlugin::run(const float**, float** outputs, uint32_t frames, const Mi
             for (uint32_t i = 0; i < m.size; ++i) engine_->midiByte(d[i]);
         }
         const uint32_t end = e < evCount ? std::min(frames, ev[e].frame) : frames;
-        if (end > pos) engine_->process(mono_.data() + pos, int(end - pos));
+        if (end > pos) engine_->process(mono_.data() + pos, int(end - pos), monoIn_.data() + pos);
         pos = end;
     }
     while (e < evCount) {

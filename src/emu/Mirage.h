@@ -36,13 +36,16 @@ public:
     // Runs the machine for (at least) the given number of CPU cycles.
     void run(int64_t cycles);
     // Produces analog-section samples at kAnalogHz into `out` (mono). Runs the CPU as needed.
-    void render(float* out, int frames);
+    void render(float* out, int frames, const float* in = nullptr);
 
     void midiIn(uint8_t b) { acia_.receive(b); }
     void setKey(int key, bool down);
     void setPitchWheel(uint8_t v) { pitch_ = v; }
     void setModWheel(uint8_t v) { mod_ = v; }
     void setAudioIn(float v) { audioIn_ = v; }
+    // True while the OS is sampling (VIA timer 1 paces the A/D reads, as at $9733).
+    bool sampling() const { return via_.timer1IrqEnabled(); }
+    float takeInputLevel() { const float v = inLevel_; inLevel_ = 0; return v; }
 
     // Display: segment bits (a..g = bit0..6, dp = bit7) for the left and right digit,
     // lit at any time during the last ~20 ms.
@@ -84,6 +87,9 @@ private:
     uint8_t dac_ = 0;
     uint8_t pitch_ = 0x80, mod_ = 0x00;
     float audioIn_ = 0;
+    const float* inBuf_ = nullptr;   // analog-rate audio input for the current render()
+    int inPos_ = 0, inLen_ = 0;
+    float inLevel_ = 0;              // peak of the input as it reaches the A/D path
 
     uint64_t segAcc_[2][8] = {};
     float segLevel_[2][8] = {};

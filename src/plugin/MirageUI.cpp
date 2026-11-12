@@ -110,6 +110,13 @@ protected:
             shown0_ = d0; shown1_ = d1; shownMotor_ = motor;
             repaint();
         }
+        // input meter: peak since the last idle call, with a gentle fall-back
+        const float peak = e.inputPeak.exchange(0.0f);
+        const float lvl = std::max(peak, inLevel_ * 0.82f);
+        if (std::fabs(lvl - inLevel_) > 0.002f || (lvl > 0 && lvl < 0.002f)) {
+            inLevel_ = lvl < 0.0005f ? 0.0f : lvl;
+            repaint();
+        }
         const std::string saved = plugin_->flushWrittenDisk();
         if (!saved.empty()) { status_ = "Saved to your disk folder"; repaint(); }
     }
@@ -218,6 +225,7 @@ private:
     float volume_ = 0.8f;
     std::string status_;
     NanoImage wordmark_;
+    float inLevel_ = 0.0f;
 
     void add(float cx, float cy, const char* label, int key, KeyColour c)
     {
@@ -246,7 +254,8 @@ private:
         // Section rules between the rows
         hline(394, 766, 66, 2);
         hline(394, 766, 124, 2);
-        hline(262, 800, 181, 2);
+        hline(262, 640, 181, 2);      // gap for the INPUT meter
+        hline(678, 800, 181, 2);
         // Group bars and labels along the bottom
         groupBar(30, 92, "POWER");
         groupBar(100, 248, "VOLUME");
@@ -259,6 +268,7 @@ private:
         for (size_t i = 0; i < buttons_.size(); ++i) drawKey(buttons_[i], int(i) == pressed_);
 
         drawDrive();
+        drawInputMeter(659, 146, 220);
 
         drawBrand();
     }
@@ -429,6 +439,26 @@ private:
         } else {
             fontSize(11); fillColor(kLabel); textAlign(ALIGN_CENTER | ALIGN_BOTTOM);
             text(b.cx, b.cy - b.h / 2 - 3, b.label, nullptr);
+        }
+    }
+
+    // Audio input level (an addition: the Mirage itself shows the level on its display in
+    // level-detect mode). 8 LEDs, -42 dBFS to 0 dBFS, 6 dB apart.
+    void drawInputMeter(float cx, float top, float bottom)
+    {
+        fontSize(9.5f); fillColor(kLabel); textAlign(ALIGN_CENTER | ALIGN_TOP);
+        text(cx, top, "INPUT", nullptr);
+        const int n = 8;
+        const float y0 = top + 16, h = (bottom - y0) / n;
+        const float db = inLevel_ > 0 ? 20.0f * std::log10(inLevel_) : -100.0f;
+        for (int i = 0; i < n; ++i) {
+            const float threshold = -42.0f + 6.0f * i;     // bottom LED lights at -42 dBFS
+            const bool on = db >= threshold;
+            Color c = i >= 7 ? Color(255, 40, 30) : i >= 5 ? Color(250, 210, 40) : Color(80, 230, 70);
+            Color off = i >= 7 ? Color(60, 14, 12) : i >= 5 ? Color(56, 48, 12) : Color(18, 50, 16);
+            const float y = bottom - (i + 1) * h + 1;
+            beginPath(); roundedRect(cx - 9, y, 18, h - 2.5f, 1);
+            fillColor(on ? c : off); fill();
         }
     }
 
