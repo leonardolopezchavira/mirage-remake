@@ -128,6 +128,13 @@ int main(int argc, char** argv)
                 for (int k = 0; k < 8; ++k) std::printf(" %c=%.2f", "abcdefgP"[k], m.segmentLevel(d, k));
                 std::printf("\n");
             }
+        } else if (c == "wheels") {
+            m.setPitchWheel(uint8_t(std::strtoul(next().c_str(), nullptr, 16)));
+            m.setModWheel(uint8_t(std::strtoul(next().c_str(), nullptr, 16)));
+        } else if (c == "dumpsram") {
+            std::string path = next();
+            std::ofstream f(path, std::ios::binary);
+            f.write(reinterpret_cast<const char*>(m.sampleRam()), 128 * 1024);
         } else if (c == "fdc") {
             std::printf("motor=%d disk=%d\n", m.fdc().motorOn(), m.fdc().hasDisk());
         } else if (c == "show") {

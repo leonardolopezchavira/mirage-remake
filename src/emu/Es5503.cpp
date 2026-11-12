@@ -1,4 +1,6 @@
 #include "Es5503.h"
+#include <cstdio>
+#include <cstdlib>
 
 namespace mirage {
 
@@ -43,7 +45,11 @@ void Es5503::haltOsc(int n, bool zeroByte, uint32_t& acc, int resshift, uint8_t 
     if (mode == MODE_SWAP) {
         partner.control &= ~1;
         partner.acc = 0;
-    } else if (partnerMode == MODE_SWAP && !(n & 1)) {
+    } else if (partnerMode == MODE_SWAP && !(n & 1) && (o.control & 1)) {
+        // An even oscillator that just halted, whose partner is in swap mode, retriggers
+        // (MAME, verified on IIgs hardware). Only when it halted: a free-running oscillator
+        // has already wrapped above, and rewinding it a second time made every loop
+        // ~1.5x too long on the Mirage (the A2 clavinet's loop fell by a fifth).
         o.control &= ~1;
         acc -= uint32_t(o.wtsize - 1) << resshift;
     }
@@ -129,6 +135,9 @@ uint8_t Es5503::read(int reg)
 void Es5503::write(int reg, uint8_t v)
 {
     reg &= 0xFF;
+    static const int traceOsc = std::getenv("MIRAGE_DOC_TRACE") ? std::atoi(std::getenv("MIRAGE_DOC_TRACE")) : -1;
+    if (traceOsc >= 0 && reg < 0xE0 && (reg & 0x1F) <= traceOsc + 1 && (reg & 0x1F) >= traceOsc && ((reg & 0xE0) >= 0x80 || std::getenv("MIRAGE_DOC_FREQ")))
+        std::fprintf(stderr, "doc w %02X=%02X\n", reg, v);
     if (reg < 0xE0) {
         const int n = reg & 0x1F;
         Osc& o = osc_[n];
