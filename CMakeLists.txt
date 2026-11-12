@@ -17,11 +17,12 @@ target_include_directories(mirage_engine PUBLIC src)
 # Boot ROM + default boot disk compiled in.
 set(MIRAGE_ROM ${CMAKE_SOURCE_DIR}/resources/rom/mirage.bin)
 set(MIRAGE_BOOT_DISK ${CMAKE_SOURCE_DIR}/resources/disks/OS/os32.img)
+set(MIRAGE_WORDMARK ${CMAKE_SOURCE_DIR}/resources/ui/wordmark.png)
 add_custom_command(
   OUTPUT ${CMAKE_BINARY_DIR}/EmbeddedData.cpp
-  COMMAND ${CMAKE_COMMAND} -DROM=${MIRAGE_ROM} -DDISK=${MIRAGE_BOOT_DISK} -DDISK_NAME=os32
+  COMMAND ${CMAKE_COMMAND} -DROM=${MIRAGE_ROM} -DDISK=${MIRAGE_BOOT_DISK} -DDISK_NAME=os32 -DWORDMARK=${MIRAGE_WORDMARK}
           -DOUT=${CMAKE_BINARY_DIR}/EmbeddedData.cpp -P ${CMAKE_SOURCE_DIR}/cmake/embed.cmake
-  DEPENDS ${MIRAGE_ROM} ${MIRAGE_BOOT_DISK} ${CMAKE_SOURCE_DIR}/cmake/embed.cmake)
+  DEPENDS ${MIRAGE_ROM} ${MIRAGE_BOOT_DISK} ${MIRAGE_WORDMARK} ${CMAKE_SOURCE_DIR}/cmake/embed.cmake)
 add_library(mirage_embedded STATIC ${CMAKE_BINARY_DIR}/EmbeddedData.cpp)
 target_include_directories(mirage_embedded PUBLIC src/plugin)
 

@@ -6,6 +6,7 @@
 #include "DistrhoUI.hpp"
 #include "MiragePlugin.hpp"
 #include "StandaloneHook.h"
+#include "EmbeddedData.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -216,6 +217,7 @@ private:
     bool shownMotor_ = false, draggingVol_ = false;
     float volume_ = 0.8f;
     std::string status_;
+    NanoImage wordmark_;
 
     void add(float cx, float cy, const char* label, int key, KeyColour c)
     {
@@ -244,7 +246,7 @@ private:
         // Section rules between the rows
         hline(394, 766, 66, 2);
         hline(394, 766, 124, 2);
-        hline(262, kW - 18, 181, 2);
+        hline(262, 800, 181, 2);
         // Group bars and labels along the bottom
         groupBar(30, 92, "POWER");
         groupBar(100, 248, "VOLUME");
@@ -258,9 +260,7 @@ private:
 
         drawDrive();
 
-        fontSize(9.5f); fillColor(kLabel);
-        spacedText(1146, 171, "DIGITAL  MULTI  SAMPLER", 2.6f);
-        drawMirageLogo(1146, 214);
+        drawBrand();
     }
 
     void hline(float x0, float x1, float y, float t)
@@ -309,11 +309,29 @@ private:
         text(x + w / 2 + 0.5f, y + h / 2 + 1, "ensoniq", nullptr);
     }
 
-    void drawMirageLogo(float right, float y)
+    // "Mirage" in the wordmark lettering (the same drawing as the app icon's "Mi"), the
+    // grey and red stripes, and the legend in small spaced capitals, as on the DSK panel.
+    void drawBrand()
     {
-        fontSize(36); textAlign(ALIGN_RIGHT | ALIGN_MIDDLE);
-        fillColor(Color(206, 178, 104));
-        for (float dx = 0; dx <= 1.6f; dx += 0.4f) text(right - 1.6f + dx, y, "Mirage", nullptr);
+        const float right = 1150, capTop = 176, capH = 40;
+        // stripes: grey above red, from the drive column to the panel's right edge
+        const float gy = 224, ry = 232;
+        beginPath(); rect(806, gy, kW - 806, 2.5f); fillColor(Color(200, 202, 206)); fill();
+        beginPath(); rect(806, ry, kW - 806, 4.0f); fillColor(Color(214, 34, 30)); fill();
+        // wordmark image: cap height 160 px at y = (0.05 + 0.12) * 160 in the PNG
+        if (!wordmark_.isValid())
+            wordmark_ = createImageFromMemory(embedded::kWordmarkPng, uint(embedded::kWordmarkPngSize), IMAGE_GENERATE_MIPMAPS);
+        if (wordmark_.isValid()) {
+            const Size<uint> sz = wordmark_.getSize();
+            const float k = capH / 160.0f;
+            const float w = sz.getWidth() * k, h = sz.getHeight() * k;
+            const float x = right - w, y = capTop - (0.05f + 0.12f) * 160.0f * k;
+            beginPath(); rect(x, y, w, h);
+            fillPaint(imagePattern(x, y, w, h, 0, wordmark_, 1.0f));
+            fill();
+        }
+        fontSize(9.0f); fillColor(Color(232, 232, 232));
+        spacedText(right, 248, "VINTAGE  DIGITAL  SAMPLER", 2.8f);
     }
 
     void drawVolume()

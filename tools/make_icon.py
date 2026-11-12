@@ -6,7 +6,10 @@ capitals: vertical outer stems, a deep V, a square i-dot set well apart), the gr
 stripes from the same panel, and "VINTAGE DIGITAL SAMPLER" in the panel's small spaced white capitals.
 usage: make_icon.py <sans font for SAMPLER> <out dir>
 """
+import os
 import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wordmark
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 SANS, OUT = sys.argv[1], sys.argv[2]
@@ -40,23 +43,9 @@ def icon(scale=4):
     img.alpha_composite(panel)
     d = ImageDraw.Draw(img)
 
-    # "Mi": outlines in units of the cap height H (traced from the wordmark)
-    M = [(0, 0), (0.50, 0), (0.80, 0.60), (1.10, 0), (1.60, 0), (1.60, 1), (1.30, 1),
-         (1.30, 0.36), (0.95, 0.93), (0.65, 0.93), (0.30, 0.36), (0.30, 1), (0, 1)]
-    I_STEM = [(1.72, 0.24), (2.02, 0.24), (2.02, 1), (1.72, 1)]
-    I_DOT = [(1.72, -0.12), (2.02, -0.12), (2.02, 0.12), (1.72, 0.12)]
-    H = 300 * scale
-    left = (W - 2.02 * H) / 2
-    top = 208 * scale
-    letters = Image.new("L", (W, W), 0)
-    ld = ImageDraw.Draw(letters)
-    for shape in (M, I_STEM, I_DOT):
-        ld.polygon([(left + x * H, top + y * H) for x, y in shape], fill=255)
-    # soften the corners slightly, as on the printed panel
-    letters = letters.filter(ImageFilter.GaussianBlur(5 * scale)).point(lambda v: 255 if v > 128 else 0)
-    letters = letters.filter(ImageFilter.GaussianBlur(scale * 0.7))
-    yellow = Image.new("RGBA", (W, W), YELLOW + (255,))
-    img.paste(yellow, (0, 0), letters)
+    # "Mi" from the shared wordmark drawing (tools/wordmark.py)
+    mi = wordmark.render("Mi", 300 * scale, YELLOW, pad=0.05, blur=5 / 300)
+    img.alpha_composite(mi, (int((W - mi.width) / 2), int(208 * scale - 0.17 * 300 * scale)))
     d = ImageDraw.Draw(img)
 
     # stripes: grey above red, across the panel
