@@ -4,6 +4,8 @@
 #include "MiragePlugin.hpp"
 #include "StandaloneHook.h"
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -35,7 +37,9 @@ public:
     MirageUI() : UI(int(kW), int(kH))
     {
         loadSharedResources();
-        setGeometryConstraints(uint(kW * 0.75f), uint(kH * 0.75f), true, true);
+        // Our own scale() handles sizing (no DPF auto-scaling, which would also rescale
+        // mouse coordinates and getWidth()).
+        setGeometryConstraints(uint(kW * 0.75f), uint(kH * 0.75f), true, false);
         plugin_ = static_cast<MiragePlugin*>(getPluginInstancePointer());
         // Standalone app only (null in every plug-in format): menus, settings, MIDI inputs.
         if (g_mirageStandaloneStart) g_mirageStandaloneStart();
@@ -156,12 +160,12 @@ protected:
         fontSize(10); fillColor(Color(170, 170, 180));
         if (!lab.empty()) textBox(812, 132, 122, lab.c_str(), nullptr);
         fontSize(9); fillColor(Color(120, 120, 130)); textAlign(ALIGN_LEFT | ALIGN_TOP);
-        text(812, 262, "\xE2\x97\x80 \xE2\x96\xB6 insert a disk, then LOAD", nullptr);
+        text(812, 262, "\xE2\x97\x80 \xE2\x96\xB6 insert disk, then LOAD", nullptr);
 
         // help line / status
         fontSize(11); textAlign(ALIGN_LEFT | ALIGN_MIDDLE); fillColor(Color(150, 150, 160));
         text(20, 278, status_.empty()
-             ? "PARAM + two digits + VALUE + \xE2\x96\xB2\xE2\x96\xBC to edit.  LOAD UPPER/LOWER + 1-3 picks a sound on the disk."
+             ? "Change sound: LOAD LOWER (or UPPER), 1-3, ENTER.   Edit: PARAM, two digits, VALUE, \xE2\x96\xB2\xE2\x96\xBC."
              : status_.c_str(), nullptr);
 
         drawKeyboard();
@@ -171,6 +175,7 @@ protected:
     {
         const float s = getWidth() / kW;
         const float x = float(ev.pos.getX()) / s, y = float(ev.pos.getY()) / s;
+        if (std::getenv("MIRAGE_TRACE")) std::fprintf(stderr, "mouse b=%u press=%d %.0f,%.0f s=%.2f\n", ev.button, ev.press, x, y, s);
         if (ev.button != 1) return false;
         if (ev.press) {
             if (x >= 20 && x <= 60 && y >= 55 && y <= 220) { draggingVol_ = true; setVolumeFromY(y); return true; }

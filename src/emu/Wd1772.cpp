@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <climits>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 namespace mirage {
 
@@ -95,6 +97,8 @@ void Wd1772::write(int reg, uint8_t v)
     if (op_ != Op::None) return;
     cmd_ = v;
     drq_ = false;
+    if (std::getenv("MIRAGE_FDC_TRACE"))
+        std::fprintf(stderr, "fdc cmd %02X trk=%d sec=%d head=%d data=%d\n", v, track_, sector_, head_, data_);
 
     if (!(v & 0x80)) { // ---- type I
         typeI_ = true;

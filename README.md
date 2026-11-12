@@ -41,7 +41,7 @@ Behind the scenes that is roughly 6 seconds of machine time, run faster than rea
 - **Play** from MIDI (any channel, OS 3.2 defaults to omni) or the on-screen keyboard.
 - **Disk drive:** ◀ ▶ step through the factory library (A1–C10) and the system disks.
   **OPEN…** inserts any Mirage `.img` (450 560 bytes). Then use the Mirage's own keys:
-  **LOAD UPPER** / **LOAD LOWER**, then 1–3.
+  **LOAD LOWER** (or **LOAD UPPER**), then 1–3, then **ENTER**.
 - **Edit:** **PARAM**, two digits, **VALUE**, then ▲ ▼ or digits. The parameter card is in
   `docs/` (see the Mirage manuals).
 - Computer keys in the editor: digits, Enter, Esc (Cancel), ↑ ↓, P (Param), V (Value).

@@ -128,6 +128,8 @@ int main(int argc, char** argv)
                 for (int k = 0; k < 8; ++k) std::printf(" %c=%.2f", "abcdefgP"[k], m.segmentLevel(d, k));
                 std::printf("\n");
             }
+        } else if (c == "fdc") {
+            std::printf("motor=%d disk=%d\n", m.fdc().motorOn(), m.fdc().hasDisk());
         } else if (c == "show") {
             show(m);
         } else if (c == "regs") {
