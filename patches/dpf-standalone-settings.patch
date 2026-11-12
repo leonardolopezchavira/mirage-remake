@@ -1,0 +1,382 @@
+diff --git a/distrho/DistrhoStandaloneUtils.hpp b/distrho/DistrhoStandaloneUtils.hpp
+index 8fffcdaa..4e0a8559 100644
+--- a/distrho/DistrhoStandaloneUtils.hpp
++++ b/distrho/DistrhoStandaloneUtils.hpp
+@@ -19,6 +19,9 @@
+ 
+ #include "src/DistrhoDefines.h"
+ 
++#include <string>
++#include <vector>
++
+ START_NAMESPACE_DISTRHO
+ 
+ /* ------------------------------------------------------------------------------------------------------------
+@@ -90,6 +93,22 @@ bool requestBufferSizeChange(uint newBufferSize);
+ */
+ bool requestMIDI();
+ 
++/* sq80-remake additions: choose the output device, sample rate and MIDI inputs.
++   Devices and MIDI ports are identified by name; an empty device name is the system default.
++   Every request reopens the audio stream and returns false (keeping the previous setting)
++   if the new one could not be opened. */
++std::vector<std::string> getAudioOutputDeviceNames();
++std::string getAudioOutputDeviceName();
++bool requestAudioOutputDevice(const char* name);
++std::vector<uint> getSupportedSampleRates();
++uint getCurrentSampleRate();
++bool requestSampleRateChange(uint sampleRate);
++/** Lists the MIDI inputs present now (a rescan). */
++std::vector<std::string> getMIDIInputNames();
++std::vector<std::string> getDisabledMIDIInputs();
++/** Every other input is connected (when MIDI is enabled), including ones that appear later. */
++bool setDisabledMIDIInputs(const std::vector<std::string>& names);
++
+ /** @} */
+ 
+ // -----------------------------------------------------------------------------------------------------------
+diff --git a/distrho/src/jackbridge/JackBridge.cpp b/distrho/src/jackbridge/JackBridge.cpp
+index c4c44b54..7c8b900e 100644
+--- a/distrho/src/jackbridge/JackBridge.cpp
++++ b/distrho/src/jackbridge/JackBridge.cpp
+@@ -1296,6 +1296,12 @@ bool jackbridge_set_sample_rate_callback(jack_client_t* client, JackSampleRateCa
+ #elif defined(JACKBRIDGE_DIRECT)
+     return (jack_set_sample_rate_callback(client, srate_callback, arg) == 0);
+ #else
++    if (usingNativeBridge)
++    {
++        nativeBridge->sampleRateCallback = srate_callback;
++        nativeBridge->jackSampleRateArg = arg;
++        return true;
++    }
+     if (usingRealJACK && getBridgeInstance().set_sample_rate_callback_ptr != nullptr)
+     {
+ # ifdef __WINE__
+@@ -2483,6 +2489,26 @@ bool requestMIDI()
+     return false;
+ }
+ 
++// sq80-remake: device, sample rate and MIDI input selection
++
++#if !(defined(JACKBRIDGE_DUMMY) || defined(JACKBRIDGE_DIRECT))
++# define SQ8L_NATIVE(expr, fallback) if (usingNativeBridge) return nativeBridge->expr; return fallback;
++#else
++# define SQ8L_NATIVE(expr, fallback) return fallback;
++#endif
++
++std::vector<std::string> getAudioOutputDeviceNames() { SQ8L_NATIVE(getAudioOutputDeviceNames(), {}) }
++std::string getAudioOutputDeviceName() { SQ8L_NATIVE(getAudioOutputDeviceName(), {}) }
++bool requestAudioOutputDevice(const char* const name) { SQ8L_NATIVE(requestAudioOutputDevice(name), false) }
++std::vector<uint> getSupportedSampleRates() { SQ8L_NATIVE(getSupportedSampleRates(), {}) }
++uint getCurrentSampleRate() { SQ8L_NATIVE(getCurrentSampleRate(), 0) }
++bool requestSampleRateChange(const uint rate) { SQ8L_NATIVE(requestSampleRateChange(rate), false) }
++std::vector<std::string> getMIDIInputNames() { SQ8L_NATIVE(getMIDIInputNames(), {}) }
++std::vector<std::string> getDisabledMIDIInputs() { SQ8L_NATIVE(getDisabledMIDIInputs(), {}) }
++bool setDisabledMIDIInputs(const std::vector<std::string>& names) { SQ8L_NATIVE(setDisabledMIDIInputs(names), false) }
++
++#undef SQ8L_NATIVE
++
+ END_NAMESPACE_DISTRHO
+ 
+ #endif // JACKBRIDGE_SKIP_NATIVE_UTILS
+diff --git a/distrho/src/jackbridge/NativeBridge.hpp b/distrho/src/jackbridge/NativeBridge.hpp
+index c1fc610f..5f6f26e4 100644
+--- a/distrho/src/jackbridge/NativeBridge.hpp
++++ b/distrho/src/jackbridge/NativeBridge.hpp
+@@ -22,6 +22,9 @@
+ #include "../../extra/Mutex.hpp"
+ #include "../../extra/RingBuffer.hpp"
+ 
++#include <string>
++#include <vector>
++
+ #if DISTRHO_PLUGIN_NUM_INPUTS > 2
+ # define DISTRHO_PLUGIN_NUM_INPUTS_2 2
+ #else
+@@ -56,6 +59,9 @@ struct NativeBridge {
+     JackBufferSizeCallback bufferSizeCallback;
+     void* jackProcessArg;
+     void* jackBufferSizeArg;
++    // sq80-remake: sample rate changes reach the plugin like with real JACK
++    JackSampleRateCallback sampleRateCallback = nullptr;
++    void* jackSampleRateArg = nullptr;
+ 
+     // Runtime buffers
+     enum PortMask {
+@@ -152,6 +158,18 @@ struct NativeBridge {
+     virtual bool requestBufferSizeChange(uint32_t) { return false; }
+     virtual bool requestMIDI() { return false; }
+ 
++    // sq80-remake: output device, sample rate and MIDI input selection for a settings page.
++    // Device and port names identify them; an empty device name means the system default.
++    virtual std::vector<std::string> getAudioOutputDeviceNames() { return {}; }
++    virtual std::string getAudioOutputDeviceName() const { return {}; }
++    virtual bool requestAudioOutputDevice(const char*) { return false; }
++    virtual std::vector<uint> getSupportedSampleRates() { return {}; }
++    virtual uint getCurrentSampleRate() const { return sampleRate; }
++    virtual bool requestSampleRateChange(uint) { return false; }
++    virtual std::vector<std::string> getMIDIInputNames() { return {}; }
++    virtual std::vector<std::string> getDisabledMIDIInputs() const { return {}; }
++    virtual bool setDisabledMIDIInputs(const std::vector<std::string>&) { return false; }
++
+     uint32_t getBufferSize() const noexcept
+     {
+         return bufferSize;
+diff --git a/distrho/src/jackbridge/RtAudioBridge.hpp b/distrho/src/jackbridge/RtAudioBridge.hpp
+index 926b3791..e6a60b55 100644
+--- a/distrho/src/jackbridge/RtAudioBridge.hpp
++++ b/distrho/src/jackbridge/RtAudioBridge.hpp
+@@ -71,6 +71,12 @@ struct RtAudioBridge : NativeBridge {
+     String name;
+     uint nextBufferSize = 512;
+ 
++    // sq80-remake: device, sample rate and MIDI input selection
++    std::string outputDeviceName;      // device in use, empty = system default
++    std::string nextOutputDeviceName;  // device the next _open() uses
++    uint nextSampleRate = 0;           // 0 = 48 kHz, DPF's fixed rate
++    std::vector<std::string> disabledMidiIns;
++
+     RtAudioBridge()
+     {
+        #if defined(RTMIDI_API_TYPE) && (DISTRHO_PLUGIN_WANT_MIDI_INPUT || DISTRHO_PLUGIN_WANT_MIDI_OUTPUT)
+@@ -228,6 +234,8 @@ struct RtAudioBridge : NativeBridge {
+         {
+             try {
+                 RtMidiIn midiIn(RtMidi::RTMIDI_API_TYPE, name.buffer());
++                if (_isMidiInDisabled(midiIn.getPortName(i)))  // sq80-remake
++                    continue;
+                 midiIn.setCallback(RtMidiCallback, this);
+                 midiIn.openPort(i);
+                 midiIns.push_back(std::move(midiIn));
+@@ -259,26 +267,161 @@ struct RtAudioBridge : NativeBridge {
+ 
+     bool requestBufferSizeChange(const uint32_t newBufferSize) override
+     {
+-        // stop audio first
+-        deactivate();
+-        close();
++        return _reopen(outputDeviceName, nextSampleRate, newBufferSize);
++    }
++
++    // sq80-remake ------------------------------------------------------------------------
++
++    std::vector<std::string> getAudioOutputDeviceNames() override
++    {
++        std::vector<std::string> names;
++        _forEachOutputDevice([&](uint, const RtAudio::DeviceInfo& info) {
++            names.push_back(info.name);
++            return false;
++        });
++        return names;
++    }
++
++    std::string getAudioOutputDeviceName() const override
++    {
++        return outputDeviceName;
++    }
++
++    bool requestAudioOutputDevice(const char* const deviceName) override
++    {
++        return _reopen(deviceName != nullptr ? deviceName : "", nextSampleRate, bufferSize);
++    }
++
++    std::vector<uint> getSupportedSampleRates() override
++    {
++        std::vector<uint> rates;
++        _forEachOutputDevice([&](uint, const RtAudio::DeviceInfo& info) {
++            const bool current = outputDeviceName.empty() ? info.isDefaultOutput
++                                                          : info.name == outputDeviceName;
++            if (!current)
++                return false;
++            for (const uint rate : info.sampleRates)
++                if (rate >= 44100)  // SQ8L does not support lower rates
++                    rates.push_back(rate);
++            return true;
++        });
++        return rates;
++    }
+ 
+-        // try to open with new buffer size
+-        nextBufferSize = newBufferSize;
++    bool requestSampleRateChange(const uint rate) override
++    {
++        return _reopen(outputDeviceName, rate, bufferSize);
++    }
+ 
+-        const bool ok = _open(captureEnabled);
++    std::vector<std::string> getMIDIInputNames() override
++    {
++        std::vector<std::string> names;
++       #if defined(RTMIDI_API_TYPE) && DISTRHO_PLUGIN_WANT_MIDI_INPUT
++        try {
++            RtMidiIn midiIn(RtMidi::RTMIDI_API_TYPE, name.buffer());
++            for (uint i = 0, count = midiIn.getPortCount(); i < count; ++i)
++                names.push_back(midiIn.getPortName(i));
++        } catch (const RtMidiError& err) {
++            d_safe_exception(err.getMessage().c_str(), __FILE__, __LINE__);
++        } DISTRHO_SAFE_EXCEPTION("getMIDIInputNames");
++       #endif
++        return names;
++    }
++
++    std::vector<std::string> getDisabledMIDIInputs() const override
++    {
++        return disabledMidiIns;
++    }
++
++    bool setDisabledMIDIInputs(const std::vector<std::string>& names) override
++    {
++        disabledMidiIns = names;
++        // reconnect: requestMIDI() closes every input and opens the enabled ones
++        return requestMIDI();
++    }
++
++    bool _isMidiInDisabled(const std::string& portName) const
++    {
++        for (const std::string& disabled : disabledMidiIns)
++            if (disabled == portName)
++                return true;
++        return false;
++    }
++
++    // Calls fn(index, info) for every device with a stereo output until fn returns true.
++    template <typename Fn>
++    void _forEachOutputDevice(Fn fn)
++    {
++        RtAudio* rtAudio = handle;
++        ScopedPointer<RtAudio> temporary;
++        if (rtAudio == nullptr)
++        {
++            try {
++                temporary = new RtAudio(RtAudio::RTAUDIO_API_TYPE);
++            } DISTRHO_SAFE_EXCEPTION_RETURN("new RtAudio()",);
++            rtAudio = temporary;
++        }
++        uint count = 0;
++        try {
++            count = rtAudio->getDeviceCount();
++        } DISTRHO_SAFE_EXCEPTION_RETURN("getDeviceCount()",);
++        for (uint i = 0; i < count; ++i)
++        {
++            RtAudio::DeviceInfo info;
++            try {
++                info = rtAudio->getDeviceInfo(i);
++            } catch (...) {
++                continue;
++            }
++            if (info.probed && info.outputChannels >= DISTRHO_PLUGIN_NUM_OUTPUTS_2 && fn(i, info))
++                return;
++        }
++    }
++
++    // Reopens the stream with new settings; on failure goes back to the previous ones.
++    // The plugin hears about a new sample rate or buffer size through the JACK callbacks.
++    bool _reopen(const std::string& deviceName, const uint rate, const uint frames)
++    {
++        const std::string oldDevice = outputDeviceName;
++        const uint oldRequestedRate = nextSampleRate;
++        const uint oldRate = sampleRate;
++        const uint oldFrames = bufferSize;
++        const bool wasRunning = handle != nullptr && handle->isStreamRunning();
++
++        if (handle != nullptr)
++            close();
++       #if DISTRHO_PLUGIN_NUM_INPUTS == 0
++        // close() only frees the buffers of plugins with inputs; the MIDI ring buffers stay,
++        // the RtMidi threads may still be writing into them
++        delete[] audioBufferStorage;
++        audioBufferStorage = nullptr;
++       #endif
++
++        nextOutputDeviceName = deviceName;
++        nextSampleRate = rate;
++        nextBufferSize = frames;
++        bool ok = _open(captureEnabled);
+ 
+         if (!ok)
+         {
+-            // revert to old buffer size if new one failed
+-            nextBufferSize = bufferSize;
+-            _open(captureEnabled);
++            nextOutputDeviceName = oldDevice;
++            nextSampleRate = oldRequestedRate;
++            nextBufferSize = oldFrames;
++            if (!_open(captureEnabled))
++            {
++                // the old device is gone too: fall back to the system default
++                nextOutputDeviceName.clear();
++                _open(captureEnabled);
++            }
+         }
+ 
+-        if (bufferSizeCallback != nullptr)
++        if (sampleRate != oldRate && sampleRateCallback != nullptr)
++            sampleRateCallback(sampleRate, jackSampleRateArg);
++        if (bufferSize != oldFrames && bufferSizeCallback != nullptr)
+             bufferSizeCallback(bufferSize, jackBufferSizeArg);
+ 
+-        activate();
++        if (wasRunning && handle != nullptr)
++            activate();
+         return ok;
+     }
+ 
+@@ -316,6 +459,29 @@ struct RtAudioBridge : NativeBridge {
+        #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+         RtAudio::StreamParameters outParams;
+         outParams.deviceId = tryingAgain != nullptr ? 1 : rtAudio->getDefaultOutputDevice();
++        if (tryingAgain == nullptr && !nextOutputDeviceName.empty())
++        {
++            // sq80-remake: the device chosen by name
++            bool found = false;
++            uint count = 0;
++            try {
++                count = rtAudio->getDeviceCount();
++            } DISTRHO_SAFE_EXCEPTION_RETURN("rtAudio->getDeviceCount()", false);
++            for (uint i = 0; i < count && !found; ++i)
++            {
++                try {
++                    const RtAudio::DeviceInfo info = rtAudio->getDeviceInfo(i);
++                    if (info.probed && info.outputChannels >= DISTRHO_PLUGIN_NUM_OUTPUTS_2
++                        && info.name == nextOutputDeviceName)
++                    {
++                        outParams.deviceId = i;
++                        found = true;
++                    }
++                } catch (...) {}
++            }
++            if (!found)
++                return false;
++        }
+         outParams.nChannels = DISTRHO_PLUGIN_NUM_OUTPUTS_2;
+         RtAudio::StreamParameters* const outParamsPtr = &outParams;
+        #else
+@@ -335,11 +501,12 @@ struct RtAudioBridge : NativeBridge {
+         opts.streamName = name.buffer();
+ 
+         try {
+-            rtAudio->openStream(outParamsPtr, inParamsPtr, RTAUDIO_FLOAT32, 48000, &rtAudioBufferFrames,
++            rtAudio->openStream(outParamsPtr, inParamsPtr, RTAUDIO_FLOAT32,
++                                nextSampleRate != 0 ? nextSampleRate : 48000, &rtAudioBufferFrames,
+                                 RtAudioCallback, this, &opts, nullptr);
+         } catch (const RtAudioError& err) {
+            #if DISTRHO_PLUGIN_NUM_OUTPUTS > 0
+-            if (outParams.deviceId == 0 && rtAudio->getDeviceCount() > 1)
++            if (outParams.deviceId == 0 && nextOutputDeviceName.empty() && rtAudio->getDeviceCount() > 1)
+                 return _open(withInput, rtAudio.release());
+            #endif
+             d_safe_exception(err.getMessage().c_str(), __FILE__, __LINE__);
+@@ -349,7 +516,13 @@ struct RtAudioBridge : NativeBridge {
+         handle = rtAudio;
+         bufferSize = rtAudioBufferFrames;
+         sampleRate = handle->getStreamSampleRate();
++        outputDeviceName = tryingAgain == nullptr ? nextOutputDeviceName : std::string();
++        // sq80-remake: the MIDI ring buffers survive a reopen (createBuffer would assert)
++       #if DISTRHO_PLUGIN_WANT_MIDI_INPUT || DISTRHO_PLUGIN_WANT_MIDI_OUTPUT
++        allocBuffers(!withInput, !midiUsed);
++       #else
+         allocBuffers(!withInput, true);
++       #endif
+         return true;
+     }
+ 

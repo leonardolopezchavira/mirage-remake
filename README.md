@@ -1,0 +1,99 @@
+# Mirage
+
+A recreation of the **Ensoniq Mirage** sampler (1984) for macOS (Apple Silicon and Intel): a
+standalone app, `Mirage.app`, plus **Audio Unit, VST3 and CLAP** plug-ins.
+
+> **Unofficial project.** Not affiliated with Ensoniq or its successors.
+
+## How it works
+
+Instead of re-implementing the Mirage's behaviour, this project emulates its hardware and runs
+the **original boot ROM and operating system**:
+
+| Part | Chip | Emulation |
+|---|---|---|
+| CPU | Motorola 6809E, 2 MHz | `src/emu/Cpu6809.*`, cycle-counted |
+| Timers, keypad, display | MOS 6522 VIA | `src/emu/Via6522.*` |
+| MIDI | Motorola 6850 ACIA | `src/emu/Acia6850.h`, paced at 31250 baud |
+| Floppy | WD1772 + 3.5" drive | `src/emu/Wd1772.*`, Mirage disk format (80 × 5632 bytes) |
+| Sound | Ensoniq ES5503 DOC, 32 oscillators, 128 KB sample RAM | `src/emu/Es5503.*` |
+| Filters | 8 × Curtis CEM3328 4-pole low-pass | `src/emu/Cem3328.h` |
+
+So every Mirage behaviour, from the parameters and the keypad to voice allocation, envelopes,
+the LFO, MIDI and disk handling, comes from Ensoniq's own code. The OS on the disk you insert
+decides what you're playing, exactly as on the instrument: stock OS 3.2, MASOS or SoundProcess.
+
+### The filters
+
+At power-on the boot ROM tunes each of the eight analog filters. It drives each one into
+self-oscillation through the DAC, times the waveform with the A/D converter, and stores a
+per-filter offset. The filter model therefore self-oscillates, with the pitch following the
+cutoff DAC exponentially at **24 codes per octave**. That figure was measured from the OS
+itself: with filter tracking at 4 ("1 octave per octave"), the cutoff moves 2 codes per semitone.
+Each filter gets a small simulated component tolerance, and the ROM's tuning compensates for it
+just as it does on real hardware.
+
+## Using it
+
+The app boots from the built-in OS 3.2 disk (piano, voices and strings) in about a second.
+Behind the scenes that is roughly 6 seconds of machine time, run faster than real time.
+
+- **Play** from MIDI (any channel, OS 3.2 defaults to omni) or the on-screen keyboard.
+- **Disk drive:** ◀ ▶ step through the factory library (A1–C10) and the system disks.
+  **OPEN…** inserts any Mirage `.img` (450 560 bytes). Then use the Mirage's own keys:
+  **LOAD UPPER** / **LOAD LOWER**, then 1–3.
+- **Edit:** **PARAM**, two digits, **VALUE**, then ▲ ▼ or digits. The parameter card is in
+  `docs/` (see the Mirage manuals).
+- Computer keys in the editor: digits, Enter, Esc (Cancel), ↑ ↓, P (Param), V (Value).
+- **Saving:** when the Mirage writes to a disk (save sound / config / format), the image is
+  saved to `~/Library/Application Support/Mirage/Disks`. Copies of bundled disks go there too.
+  Those disks then appear in the drive's list.
+- **Fast disk** (on by default): while the drive is running, the machine runs 8× faster, so
+  loading takes about a second instead of 10. Turn it off for authentic loading times.
+
+### Install (macOS)
+
+Download `Mirage-macOS-universal.zip` from the
+[mac-latest release](https://github.com/leonardolopezchavira/mirage-remake/releases/tag/mac-latest),
+copy `Mirage.app` to `/Applications` and the plug-ins to `~/Library/Audio/Plug-Ins/`
+(`Components`, `VST3`, `CLAP`), then remove the quarantine flag once:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Mirage.app ~/Library/Audio/Plug-Ins/Components/Mirage.component \
+  ~/Library/Audio/Plug-Ins/VST3/Mirage.vst3 ~/Library/Audio/Plug-Ins/CLAP/Mirage.clap
+```
+
+## Not done yet
+
+- **Sampling.** The A/D path exists (it is what the filter tuning uses), but audio input from
+  the host or the Mac's input is not connected yet.
+- **The DSK-8 keyboard controller** (R6500/11) is not emulated. Play from MIDI, as with the
+  DMS-8 rack.
+- **Plug-in state** stores the inserted disk's path only, not the full machine state. A sound
+  edited in a project but not saved to disk comes back as it was on the disk.
+
+## Building
+
+```sh
+git clone --recursive https://github.com/leonardolopezchavira/mirage-remake
+cmake -S mirage-remake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+./build/mirage_engine_check     # boots, plays a chord, checks speed
+```
+
+`build/mirage_cli` runs the machine headless, which is handy for testing, for example:
+
+```sh
+./build/mirage_cli resources/rom/mirage.bin disk resources/disks/OS/os32.img run 8 show \
+    key PARAM key 3 key 8 key VALUE show midi 90,3c,64 wav note.wav 2 filters
+```
+
+## Credits
+
+- Memory map, I/O layout and ES5503 details: MAME's `enmirage.cpp` and `es5503.cpp`
+  (R. Belmont, tim lindner; BSD-3-Clause).
+- ROM disassembly: Tim Victor, Gordon JC Pearce, and Alessandro Fasan's
+  [AlfaSoniQMirage](https://github.com/alfa95139/AlfaSoniQMirage).
+- Disk images and manuals: the [ZAPPPP/Mirage](https://github.com/ZAPPPP/Mirage) collection.
+- Plug-in framework: [DPF](https://github.com/DISTRHO/DPF). The standalone settings window
+  comes from [sq80-remake](https://github.com/leonardolopezchavira/sq80-remake).

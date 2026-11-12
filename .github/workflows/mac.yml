@@ -1,0 +1,64 @@
+name: mac
+
+# Builds Mirage for Apple Silicon and Intel Macs (standalone Mirage.app plus the AU, VST3 and
+# CLAP plug-ins), checks the engine and the Audio Unit, and publishes the zip as the rolling
+# "mac-latest" release.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mac
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - run: brew install ninja
+      - name: Configure (universal)
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+      - name: Build
+        run: cmake --build build
+      - name: Engine check (boot, filter tuning, chord, speed)
+        run: ./build/mirage_engine_check
+      - name: The standalone app was built for both architectures
+        run: |
+          test -x build/bin/Mirage.app/Contents/MacOS/Mirage
+          lipo build/bin/Mirage.app/Contents/MacOS/Mirage -verify_arch arm64 x86_64
+          plutil -lint build/bin/Mirage.app/Contents/Info.plist
+          test -f build/bin/Mirage.app/Contents/Resources/Disks/Factory/A1.img
+      - name: Package
+        run: tools/package.sh build Mirage-macOS-universal.zip
+      - name: Validate the packaged Audio Unit
+        run: |
+          ditto -x -k Mirage-macOS-universal.zip pkg
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R pkg/Mirage/Mirage.component ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true
+          auval -v aumu Mrge MRmk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mirage-macOS-universal
+          path: Mirage-macOS-universal.zip
+      - name: Publish the mac-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag -f mac-latest "$GITHUB_SHA"
+          git push -f origin refs/tags/mac-latest
+          if gh release view mac-latest >/dev/null 2>&1; then
+            gh release upload mac-latest Mirage-macOS-universal.zip --clobber
+          else
+            gh release create mac-latest Mirage-macOS-universal.zip --prerelease \
+              --title "Mirage for Mac (latest build)" \
+              --notes "Standalone Mirage.app plus AU, VST3 and CLAP plug-ins, universal (Apple Silicon and Intel). Rebuilt on every push to main."
+          fi
