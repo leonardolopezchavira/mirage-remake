@@ -1,6 +1,7 @@
 #include "MiragePlugin.hpp"
 #include "DistrhoPluginUtils.hpp"
 #include "EmbeddedData.h"
+#include "../engine/DiskImage.h"
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -35,6 +36,14 @@ bool readFile(const std::string& p, std::vector<uint8_t>& out)
     if (!f) return false;
     out.assign(std::istreambuf_iterator<char>(f), {});
     return true;
+}
+
+bool isDiskFile(const std::string& n)
+{
+    if (n.size() < 5 || n[0] == '.') return false;
+    std::string ext = n.substr(n.size() - 4);
+    for (auto& c : ext) c = char(std::tolower((unsigned char)c));
+    return ext == ".img" || ext == ".hfe";
 }
 
 bool isDir(const std::string& p)
@@ -113,7 +122,7 @@ void MiragePlugin::scanDisks()
             if (DIR* dp = opendir(dir.c_str())) {
                 while (dirent* e = readdir(dp)) {
                     std::string n = e->d_name;
-                    if (n.size() < 5 || n.substr(n.size() - 4) != ".img") continue;
+                    if (!isDiskFile(n)) continue;
                     DiskEntry de;
                     de.name = baseName(n);
                     de.path = dir + "/" + n;
@@ -133,7 +142,7 @@ void MiragePlugin::scanDisks()
     if (DIR* dp = opendir(user.c_str())) {
         while (dirent* e = readdir(dp)) {
             std::string n = e->d_name;
-            if (n.size() < 5 || n.substr(n.size() - 4) != ".img") continue;
+            if (!isDiskFile(n)) continue;
             found.push_back({baseName(n), "Your disk", user + "/" + n});
         }
         closedir(dp);
@@ -142,12 +151,17 @@ void MiragePlugin::scanDisks()
     disks_.insert(disks_.end(), found.begin(), found.end());
 }
 
-bool MiragePlugin::loadDiskFile(const std::string& path)
+bool MiragePlugin::loadDiskFile(const std::string& path, std::string* error)
 {
-    std::vector<uint8_t> img;
-    if (!readFile(path, img) || img.size() != size_t(mirage::Wd1772::kImageBytes)) return false;
-    engine_->insertDisk(std::move(img), baseName(path), path);
-    return true;
+    std::vector<uint8_t> file, img;
+    std::string err;
+    if (!readFile(path, file)) err = "Could not read " + baseName(path);
+    else if (mirage::decodeDiskImage(file, img, err)) {
+        engine_->insertDisk(std::move(img), baseName(path), path);
+        return true;
+    }
+    if (error) *error = err;
+    return false;
 }
 
 std::string MiragePlugin::flushWrittenDisk()
@@ -157,8 +171,11 @@ std::string MiragePlugin::flushWrittenDisk()
     if (!engine_->takeWrittenDisk(img, path)) return "";
     const std::string user = userDiskDir();
     std::string target = path;
-    if (target.empty() || target.compare(0, user.size(), user) != 0) {
-        const std::string name = target.empty() ? std::string(embedded::kBootDiskName) : baseName(target);
+    // Disks from the user's folder are written back in place (.img only); anything else
+    // (bundled disks, other folders, .hfe files) is saved as an .img copy in that folder.
+    const bool isImg = target.size() > 4 && (target.substr(target.size() - 4) == ".img");
+    if (target.empty() || !isImg || target.compare(0, user.size(), user) != 0) {
+        const std::string name = target.empty() ? engine_->diskName() : baseName(target);
         target = user + "/" + name + ".img";
     }
     std::ofstream f(target, std::ios::binary | std::ios::trunc);

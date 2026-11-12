@@ -1,6 +1,7 @@
 # Mirage
 
-A recreation of the **Ensoniq Mirage** sampler (1984) for macOS (Apple Silicon and Intel): a
+A recreation of the **Ensoniq Mirage** sampler (1984), with an editor modelled on the
+DMS-8 rack unit's front panel, for macOS (Apple Silicon and Intel): a
 standalone app, `Mirage.app`, plus **Audio Unit, VST3 and CLAP** plug-ins.
 
 > **Unofficial project.** Not affiliated with Ensoniq or its successors.
@@ -39,8 +40,11 @@ The app boots from the built-in OS 3.2 disk (piano, voices and strings) in about
 Behind the scenes that is roughly 6 seconds of machine time, run faster than real time.
 
 - **Play** from MIDI (any channel, OS 3.2 defaults to omni) or the on-screen keyboard.
-- **Disk drive:** ◀ ▶ step through the factory library (A1–C10) and the system disks.
-  **OPEN…** inserts any Mirage `.img` (450 560 bytes). Then use the Mirage's own keys:
+- **Disk drive:** ◀ ▶ step through the factory library (A1–C10), the system disks and your
+  own disk folder. **Open…** inserts a disk image from anywhere: raw `.img` (450 560 bytes)
+  or HxC `.hfe` (v1). `.edm` files are not supported; use the `.img` of the same disk.
+- **Your disk folder:** `~/Library/Application Support/Mirage/Disks`. `.img` and `.hfe`
+  files placed there appear in the ◀ ▶ list (read when the app or plug-in opens). Then use the Mirage's own keys:
   **LOAD LOWER** (or **LOAD UPPER**), then 1–3, then **ENTER**.
 - **Edit:** **PARAM**, two digits, **VALUE**, then ▲ ▼ or digits. The parameter card is in
   `docs/` (see the Mirage manuals).

@@ -20,7 +20,7 @@ public:
     // Bundled disk images (Contents/Resources/Disks on macOS).
     struct DiskEntry { std::string name, label, path; };
     const std::vector<DiskEntry>& disks() const { return disks_; }
-    bool loadDiskFile(const std::string& path);
+    bool loadDiskFile(const std::string& path, std::string* error = nullptr);
     std::string userDiskDir() const;
     // Writes a disk the Mirage saved to back to a file (a copy in the user's disk folder
     // when it came from the read-only bundle). Returns the path written, or "".
