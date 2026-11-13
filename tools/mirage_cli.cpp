@@ -135,6 +135,12 @@ int main(int argc, char** argv)
             std::string path = next();
             std::ofstream f(path, std::ios::binary);
             f.write(reinterpret_cast<const char*>(m.sampleRam()), 128 * 1024);
+        } else if (c == "savedisk") {
+            std::string path = next();
+            std::ofstream f(path, std::ios::binary);
+            const auto& img = m.fdc().image();
+            f.write(reinterpret_cast<const char*>(img.data()), std::streamsize(img.size()));
+            std::printf("saved disk to %s (dirty=%d)\n", path.c_str(), m.fdc().dirty());
         } else if (c == "fdc") {
             std::printf("motor=%d disk=%d\n", m.fdc().motorOn(), m.fdc().hasDisk());
         } else if (c == "show") {

@@ -110,6 +110,7 @@ void MiragePlugin::scanDisks()
     }
     for (const auto& root : roots) {
         if (!isDir(root)) continue;
+        templatePath_ = root + "/Template/Blank.img";
         for (const char* sub : {"Factory", "OS"}) {
             const std::string dir = root + "/" + sub;
             std::map<std::string, std::string> labels;
@@ -188,6 +189,32 @@ float MiragePlugin::preference(const std::string& key, float fallback) const
         if (eq != std::string::npos && line.substr(0, eq) == key) return std::strtof(line.c_str() + eq + 1, nullptr);
     }
     return fallback;
+}
+
+int MiragePlugin::newDisk(std::string* error)
+{
+    std::vector<uint8_t> img;
+    if (templatePath_.empty() || !readFile(templatePath_, img) || img.size() != size_t(mirage::Wd1772::kImageBytes)) {
+        // no bundled template: the built-in OS 3.2 disk is a bootable, formatted disk too
+        img.assign(embedded::kBootDisk, embedded::kBootDisk + embedded::kBootDiskSize);
+    }
+    const std::string dir = userDiskDir();
+    std::string name, path;
+    for (int n = 1; n < 1000; ++n) {
+        name = "My Disk " + std::to_string(n);
+        path = dir + "/" + name + ".img";
+        struct stat st;
+        if (stat(path.c_str(), &st) != 0) break;
+    }
+    std::ofstream f(path, std::ios::binary | std::ios::trunc);
+    if (!f || !f.write(reinterpret_cast<const char*>(img.data()), std::streamsize(img.size()))) {
+        if (error) *error = "Could not create " + path;
+        return -1;
+    }
+    f.close();
+    engine_->insertDisk(img, name, path);
+    disks_.push_back({name, "Your disk (new)", path});
+    return int(disks_.size()) - 1;
 }
 
 std::string MiragePlugin::flushWrittenDisk()

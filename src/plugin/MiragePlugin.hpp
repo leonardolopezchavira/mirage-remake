@@ -21,6 +21,10 @@ public:
     struct DiskEntry { std::string name, label, path; };
     const std::vector<DiskEntry>& disks() const { return disks_; }
     bool loadDiskFile(const std::string& path, std::string* error = nullptr);
+    // Copies the blank formatted disk (OS 3.2, made with Ensoniq's fmt2 formatter) to the
+    // user's disk folder as "My Disk N.img", inserts it and adds it to disks().
+    // Returns its index in disks(), or -1 (error in *error).
+    int newDisk(std::string* error = nullptr);
     std::string userDiskDir() const;
     // Writes a disk the Mirage saved to back to a file (a copy in the user's disk folder
     // when it came from the read-only bundle). Returns the path written, or "".
@@ -53,6 +57,7 @@ private:
     std::unique_ptr<mirage::MirageEngine> engine_;
     std::vector<DiskEntry> disks_;
     std::vector<float> mono_, monoIn_;
+    std::string templatePath_;
     void scanDisks();
 };
 

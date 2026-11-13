@@ -59,9 +59,16 @@ Behind the scenes that is roughly 6 seconds of machine time, run faster than rea
   libraries tuned on real Mirages (e.g. Sound Cells, about 20 cents flat with factory tuning
   on). It is a host-automatable parameter in the plug-ins, and the app remembers it.
 - Computer keys in the editor: digits, Enter, Esc (Cancel), ↑ ↓, P (Param), V (Value).
-- **Saving:** when the Mirage writes to a disk (save sound / config / format), the image is
-  saved to `~/Library/Application Support/Mirage/Disks`. Copies of bundled disks go there too.
-  Those disks then appear in the drive's list.
+- **New disks:** **New** (next to Open…) creates a blank formatted disk with OS 3.2,
+  `My Disk 1.img`, `My Disk 2.img`… in `~/Library/Application Support/Mirage/Disks`, and
+  inserts it. Save into it with the Mirage's own commands: **PARAM 1 1** (lower sound) or
+  **PARAM 1 2** (upper), then the slot **1–3**, then **ENTER**. Each disk holds three lower
+  and three upper sounds, and boots on its own (it carries the OS). The blank template
+  (`resources/disks/Template/Blank.img`) was made by Ensoniq's own formatter disk (`fmt2`)
+  running in the emulator.
+- **Saving:** when the Mirage writes to a disk, disks in your folder are updated in place;
+  bundled disks and `.hfe` files are never changed: the written image is saved as a copy in
+  your folder, which then appears in the drive's list.
 - **Fast disk** (on by default): while the drive is running, the machine runs 8× faster, so
   loading takes about a second instead of 10. Turn it off for authentic loading times.
 

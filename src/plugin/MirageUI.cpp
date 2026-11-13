@@ -31,7 +31,7 @@ const Color kKeyBlackDark(16, 17, 20);
 const Color kLedOn(250, 240, 70), kLedOff(30, 30, 14), kLedWindow(12, 14, 9);
 
 enum KeyColour { Grey, Yellow, White, Black, Small };
-enum Action { ActNone = 0, ActDiskPrev, ActDiskNext, ActDiskOpen, ActFactoryTuning };
+enum Action { ActNone = 0, ActDiskPrev, ActDiskNext, ActDiskOpen, ActFactoryTuning, ActDiskNew };
 
 struct Button {
     float cx, cy;        // centre of the key
@@ -91,6 +91,7 @@ public:
         // Disk library (an addition: picks the disk image in the drive)
         buttons_.push_back({868, 152, "\xE2\x97\x80", -1, ActDiskPrev, Small, 22, 13});
         buttons_.push_back({896, 152, "\xE2\x96\xB6", -1, ActDiskNext, Small, 22, 13});
+        buttons_.push_back({1078, 152, "New", -1, ActDiskNew, Small, 40, 13});
         buttons_.push_back({1126, 152, "Open\xE2\x80\xA6", -1, ActDiskOpen, Small, 44, 13});
 
         const std::string cur = plugin_->engine().diskName();
@@ -121,8 +122,9 @@ protected:
             inLevel_ = lvl < 0.0005f ? 0.0f : lvl;
             repaint();
         }
+        if (statusTicks_ > 0 && --statusTicks_ == 0) { status_.clear(); repaint(); }
         const std::string saved = plugin_->flushWrittenDisk();
-        if (!saved.empty()) { status_ = "Saved to your disk folder"; repaint(); }
+        if (!saved.empty()) { showStatus("Saved to your disk folder"); repaint(); }
     }
 
     void uiFileBrowserSelected(const char* filename) override
@@ -131,9 +133,9 @@ protected:
         std::string err;
         if (plugin_->loadDiskFile(filename, &err)) {
             sel_ = -1;
-            status_.clear();
+            showStatus("");
         } else {
-            status_ = err;
+            showStatus(err);
         }
         repaint();
     }
@@ -228,6 +230,14 @@ private:
     bool shownMotor_ = false, draggingVol_ = false;
     float volume_ = 0.8f;
     std::string status_;
+    int statusTicks_ = 0;   // idle calls left before the status message clears
+
+    void showStatus(const std::string& s)
+    {
+        status_ = s;
+        statusTicks_ = s.empty() ? 0 : 200;  // ~6 s at DPF's idle rate
+        repaint();
+    }
     NanoImage wordmark_;
     float inLevel_ = 0.0f;
     bool factoryTuning_ = true;
@@ -494,7 +504,11 @@ private:
         if (sel_ >= 0 && sel_ < int(disks.size())) { name = disks[size_t(sel_)].name; lab = disks[size_t(sel_)].label; }
         fontSize(11.5f); textAlign(ALIGN_LEFT | ALIGN_MIDDLE); fillColor(Color(210, 214, 220));
         if (!name.empty()) text(x + 50, y + 61, name.c_str(), nullptr);
-        if (!lab.empty()) {
+        if (!status_.empty()) {
+            fontSize(9); fillColor(Color(250, 214, 90));
+            const std::string st = status_.size() > 60 ? status_.substr(0, 59) + "\xE2\x80\xA6" : status_;
+            text(x + 26, y + 82, st.c_str(), nullptr);
+        } else if (!lab.empty()) {
             fontSize(9); fillColor(Color(146, 152, 162));
             const std::string l = lab.size() > 44 ? lab.substr(0, 43) + "\xE2\x80\xA6" : lab;
             text(x + 26, y + 82, l.c_str(), nullptr);
@@ -502,7 +516,7 @@ private:
 
         // disk library row
         fontSize(9.5f); fillColor(kLabel); textAlign(ALIGN_LEFT | ALIGN_MIDDLE);
-        text(914, 152, status_.empty() ? "DISK LIBRARY" : status_.c_str(), nullptr);
+        text(914, 152, "DISK LIBRARY", nullptr);
     }
 
     // ------------------------------------------------------------------ keyboard strip
@@ -576,8 +590,19 @@ private:
             setParameterValue(kParamFactoryTuning, factoryTuning_ ? 1.0f : 0.0f);
             plugin_->engine().factoryTuning.store(factoryTuning_);
             plugin_->savePreference("factory_tuning", factoryTuning_ ? 1.0f : 0.0f);
-            status_ = factoryTuning_ ? "Factory tuning on: Ensoniq disks at A440"
-                                     : "Factory tuning off: nominal 8 MHz clock (third-party disks)";
+            showStatus(factoryTuning_ ? "Factory tuning on: Ensoniq disks at A440"
+                                     : "Factory tuning off: original 8 MHz clock");
+            return;
+        }
+        if (a == ActDiskNew) {
+            std::string err;
+            const int idx = plugin_->newDisk(&err);
+            if (idx >= 0) {
+                sel_ = idx;
+                showStatus("Blank disk in drive. Save: PARAM 11 or 12, 1-3, ENTER");
+            } else {
+                showStatus(err);
+            }
             return;
         }
         if (a == ActDiskOpen) {
@@ -588,11 +613,11 @@ private:
             openFileBrowser(opts);
             return;
         }
-        if (disks.empty()) { status_ = "No disks found"; return; }
+        if (disks.empty()) { showStatus("No disks found"); return; }
         if (a == ActDiskPrev) sel_ = sel_ <= 0 ? int(disks.size()) - 1 : sel_ - 1;
         if (a == ActDiskNext) sel_ = sel_ < 0 || sel_ >= int(disks.size()) - 1 ? 0 : sel_ + 1;
         std::string err;
-        status_ = plugin_->loadDiskFile(disks[size_t(sel_)].path, &err) ? "" : err;
+        showStatus(plugin_->loadDiskFile(disks[size_t(sel_)].path, &err) ? std::string() : err);
     }
 
     void noteOn(int n)
