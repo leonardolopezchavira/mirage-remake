@@ -48,9 +48,12 @@ Behind the scenes that is roughly 6 seconds of machine time, run faster than rea
   **LOAD LOWER** (or **LOAD UPPER**), then 1–3, then **ENTER**.
 - **Edit:** **PARAM**, two digits, **VALUE**, then ▲ ▼ or digits. The parameter card is in
   `docs/` (see the Mirage manuals).
-- **Tuning:** at start-up the app sets Master Tune (parameter 21) to 47 instead of the
-  OS default of 50, which plays about 14 cents sharp on every key; 47 measures within
-  ±2 cents of A440 across the keyboard. Each step is about 5 cents.
+- **Tuning:** Master Tune (parameter 21) stays at its default of 50 and everything plays at
+  A440: the factory library within ±3 cents, and sounds you sample within a few cents of the
+  original. To get there, the emulated machine (CPU and sound chip together) runs 13.5 cents
+  slower than the nominal 8 MHz. At exactly 8 MHz the factory disks play about 13.5 cents
+  sharp, while sampled sounds, recorded and played on the same clock, are unaffected by the
+  clock either way.
 - Computer keys in the editor: digits, Enter, Esc (Cancel), ↑ ↓, P (Param), V (Value).
 - **Saving:** when the Mirage writes to a disk (save sound / config / format), the image is
   saved to `~/Library/Application Support/Mirage/Disks`. Copies of bundled disks go there too.

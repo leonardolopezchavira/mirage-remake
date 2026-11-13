@@ -41,6 +41,11 @@ public:
     MirageEngine(const std::vector<uint8_t>& rom, const std::vector<uint8_t>& bootDisk, const std::string& bootDiskName);
 
     void setSampleRate(double fs);
+    // Runs the whole machine (CPU, DOC, filters) this many cents slow or fast relative to its
+    // nominal 2 MHz / 8 MHz clocks. Everything the Mirage plays shifts by that amount, while
+    // sounds it samples keep their pitch (recorded and played on the same clock).
+    void setClockTrimCents(double cents);
+    static constexpr double kDefaultClockTrimCents = -13.5;
     // Audio thread.
     void midiByte(uint8_t b) { m_.midiIn(b); }
     // mono out; `in` (optional) is the mono audio input at the host rate
@@ -69,6 +74,8 @@ public:
 private:
     Mirage m_;
     double fs_ = 48000.0;
+    // The machine runs slightly slower than nominal (see setClockTrimCents()).
+    double clockScale_ = 1.0;
     double step_ = Mirage::kAnalogHz / 48000.0;  // analog samples per host sample
     double phase_ = 0.0;
     float hist_[4] = {};    // last 4 filtered analog samples, for cubic interpolation

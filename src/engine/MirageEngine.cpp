@@ -11,6 +11,11 @@ MirageEngine::MirageEngine(const std::vector<uint8_t>& rom, const std::vector<ui
     m_.reset();
     m_.fdc().insert(bootDisk);
     diskName_ = bootDiskName;
+    // At the nominal 8 MHz the factory library plays ~13.5 cents sharp with Master Tune at
+    // its default of 50, while sounds sampled on the machine play in tune. Running the whole
+    // machine 13.5 cents slow puts the factory sounds at A440 and leaves sampled sounds in
+    // tune, so Master Tune 50 is right for both.
+    setClockTrimCents(kDefaultClockTrimCents);
     designFilter();
     boot();
 }
@@ -28,25 +33,20 @@ void MirageEngine::boot()
     }
     m_.run(int64_t(0.2 * Mirage::kCpuHz));
 
-    // Master Tune (parameter 21) defaults to 50, which plays about 14 cents sharp of A440
-    // on every key. 47 is the closest setting (measured within +-2 cents across the
-    // keyboard), so set it through the front panel as a player would:
-    // PARAM 2 1 VALUE, three times Off/Down, then back to PARAM.
-    for (int key : {Mirage::Param, Mirage::K2, Mirage::K1, Mirage::Value,
-                    Mirage::Down, Mirage::Down, Mirage::Down, Mirage::Param}) {
-        m_.setKey(key, true);
-        m_.run(int64_t(0.08 * Mirage::kCpuHz));
-        m_.setKey(key, false);
-        m_.run(int64_t(0.08 * Mirage::kCpuHz));
-    }
     m_.fdc().clearDirty();
 }
 
 void MirageEngine::setSampleRate(double fs)
 {
     fs_ = fs;
-    step_ = Mirage::kAnalogHz / fs;
+    step_ = Mirage::kAnalogHz * clockScale_ / fs;
     designFilter();
+}
+
+void MirageEngine::setClockTrimCents(double cents)
+{
+    clockScale_ = std::exp2(cents / 1200.0);
+    step_ = Mirage::kAnalogHz * clockScale_ / fs_;
 }
 
 void MirageEngine::designFilter()
@@ -118,7 +118,7 @@ void MirageEngine::process(float* out, int frames, const float* in)
     const bool motor = m_.fdc().motorOn();
     if (motor && fastDisk.load()) {
         const int turbo = std::max(1, diskTurbo.load());
-        m_.run(int64_t(double(frames) / fs_ * Mirage::kCpuHz * (turbo - 1)));
+        m_.run(int64_t(double(frames) / fs_ * Mirage::kCpuHz * clockScale_ * (turbo - 1)));
     }
 
     // Analog samples needed for this block.
