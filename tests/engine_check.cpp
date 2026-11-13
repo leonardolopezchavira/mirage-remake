@@ -71,7 +71,7 @@ int main()
     const double hz = zc / 2.0 / ((rec.size() - 9601) / 48000.0);
     std::printf("sampling: level-detect %d, finished (SF) %d, playback %.1f Hz\n", levelDetect, finished, hz);
 
-    bool ok = quiet < 0.01 && loud > 0.05 && rt > 2.0 && levelDetect && finished && std::fabs(hz - 440.0) < 8.0;
+    bool ok = quiet < 0.01 && loud > 0.05 && rt > 2.0 && levelDetect && finished && std::fabs(hz - 440.0) < 2.0;
     std::printf("%s\n", ok ? "ENGINE OK" : "ENGINE FAIL");
     return ok ? 0 : 1;
 }

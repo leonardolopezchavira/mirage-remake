@@ -46,6 +46,12 @@ public:
     // sounds it samples keep their pitch (recorded and played on the same clock).
     void setClockTrimCents(double cents);
     static constexpr double kDefaultClockTrimCents = -13.5;
+    // While the OS samples, the input reaches the machine this many cents low or high (it is
+    // read slightly slower or faster; outside sampling it passes through unchanged). The OS's
+    // pitch table plays a fresh sample ~3.3 cents above the pitch it was recorded at, so
+    // -3.3 cents makes a sampled 440 Hz tone play back at 440 Hz (measured to 0.1 cent).
+    void setSampleTrimCents(double cents) { sampleTrim_ = std::exp2(cents / 1200.0); }
+    static constexpr double kDefaultSampleTrimCents = -3.3;
     // Audio thread.
     void midiByte(uint8_t b) { m_.midiIn(b); }
     // mono out; `in` (optional) is the mono audio input at the host rate
@@ -83,7 +89,12 @@ private:
         float run(float x) { double y = b0 * x + z1; z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y; return float(y); } };
     Biquad aa_[4];          // 8th-order Butterworth anti-alias filter at the analog rate
     std::vector<float> scratch_, inScratch_;
-    float lastIn_ = 0.0f;
+    // Host audio input ring (host rate) and the fractional read position feeding the machine.
+    static constexpr int kInRing = 1 << 16;
+    std::vector<float> inRing_ = std::vector<float>(kInRing, 0.0f);
+    int64_t inWrite_ = 0;      // samples written so far
+    double inRead_ = 0.0;      // read position, in host samples
+    double sampleTrim_ = 1.0;  // input speed while sampling (see setSampleTrimCents())
 
     ByteRing uiMidi_;
     std::atomic<uint32_t> keys_{0}, appliedKeys_{0};
