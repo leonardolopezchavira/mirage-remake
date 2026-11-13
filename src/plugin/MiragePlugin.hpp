@@ -9,7 +9,7 @@
 
 START_NAMESPACE_DISTRHO
 
-enum Params { kParamVolume = 0, kParamFastDisk, kParamCount };
+enum Params { kParamVolume = 0, kParamFastDisk, kParamFactoryTuning, kParamCount };
 
 class MiragePlugin : public Plugin {
 public:
@@ -25,6 +25,10 @@ public:
     // Writes a disk the Mirage saved to back to a file (a copy in the user's disk folder
     // when it came from the read-only bundle). Returns the path written, or "".
     std::string flushWrittenDisk();
+    // Remembered editor choices (~/Library/Application Support/Mirage/settings.txt): used as
+    // parameter defaults, so the standalone app comes back the way it was left.
+    void savePreference(const std::string& key, float value);
+    float preference(const std::string& key, float fallback) const;
     ~MiragePlugin() override { flushWrittenDisk(); }
 
 protected:

@@ -70,6 +70,10 @@ public:
     void setDiskPath(const std::string& p) { std::lock_guard<std::mutex> l(nameLock_); diskPath_ = p; }
 
     std::atomic<float> volume{0.8f};
+    // Factory tuning: run the machine kDefaultClockTrimCents slow so the Ensoniq library plays
+    // at A440 with Master Tune 50 (on), or at the nominal clocks (off), e.g. for third-party
+    // disks tuned on hardware. Applied by the audio thread.
+    std::atomic<bool> factoryTuning{true};
     std::atomic<float> inputPeak{0.0f};     // host input peak (editor meter; the editor resets it)
     std::atomic<bool> samplingNow{false};
     std::atomic<bool> fastDisk{true};
@@ -82,6 +86,7 @@ private:
     double fs_ = 48000.0;
     // The machine runs slightly slower than nominal (see setClockTrimCents()).
     double clockScale_ = 1.0;
+    bool appliedFactoryTuning_ = true;
     double step_ = Mirage::kAnalogHz / 48000.0;  // analog samples per host sample
     double phase_ = 0.0;
     float hist_[4] = {};    // last 4 filtered analog samples, for cubic interpolation

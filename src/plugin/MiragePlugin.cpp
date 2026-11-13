@@ -164,6 +164,32 @@ bool MiragePlugin::loadDiskFile(const std::string& path, std::string* error)
     return false;
 }
 
+void MiragePlugin::savePreference(const std::string& key, float value)
+{
+    const std::string path = dirName(userDiskDir()) + "/settings.txt";
+    std::map<std::string, std::string> kv;
+    {
+        std::ifstream f(path);
+        for (std::string line; std::getline(f, line);) {
+            const size_t eq = line.find('=');
+            if (eq != std::string::npos) kv[line.substr(0, eq)] = line.substr(eq + 1);
+        }
+    }
+    kv[key] = std::to_string(value);
+    std::ofstream f(path, std::ios::trunc);
+    for (const auto& [k, v] : kv) f << k << '=' << v << '\n';
+}
+
+float MiragePlugin::preference(const std::string& key, float fallback) const
+{
+    std::ifstream f(dirName(userDiskDir()) + "/settings.txt");
+    for (std::string line; std::getline(f, line);) {
+        const size_t eq = line.find('=');
+        if (eq != std::string::npos && line.substr(0, eq) == key) return std::strtof(line.c_str() + eq + 1, nullptr);
+    }
+    return fallback;
+}
+
 std::string MiragePlugin::flushWrittenDisk()
 {
     std::vector<uint8_t> img;
@@ -194,6 +220,14 @@ void MiragePlugin::initParameter(uint32_t index, Parameter& p)
         p.symbol = "volume";
         p.ranges.def = 0.8f; p.ranges.min = 0.0f; p.ranges.max = 1.0f;
         break;
+    case kParamFactoryTuning:
+        p.hints = kParameterIsAutomatable | kParameterIsBoolean | kParameterIsInteger;
+        p.name = "Factory tuning";
+        p.symbol = "factorytuning";
+        p.ranges.min = 0.0f; p.ranges.max = 1.0f;
+        p.ranges.def = preference("factory_tuning", 1.0f) > 0.5f ? 1.0f : 0.0f;
+        engine_->factoryTuning.store(p.ranges.def > 0.5f);
+        break;
     case kParamFastDisk:
         p.hints = kParameterIsBoolean | kParameterIsInteger;
         p.name = "Fast disk";
@@ -208,6 +242,7 @@ float MiragePlugin::getParameterValue(uint32_t index) const
     switch (index) {
     case kParamVolume: return engine_->volume.load();
     case kParamFastDisk: return engine_->fastDisk.load() ? 1.0f : 0.0f;
+    case kParamFactoryTuning: return engine_->factoryTuning.load() ? 1.0f : 0.0f;
     }
     return 0.0f;
 }
@@ -217,6 +252,7 @@ void MiragePlugin::setParameterValue(uint32_t index, float v)
     switch (index) {
     case kParamVolume: engine_->volume.store(v); break;
     case kParamFastDisk: engine_->fastDisk.store(v > 0.5f); break;
+    case kParamFactoryTuning: engine_->factoryTuning.store(v > 0.5f); break;
     }
 }
 

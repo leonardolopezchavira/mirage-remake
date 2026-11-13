@@ -31,7 +31,7 @@ const Color kKeyBlackDark(16, 17, 20);
 const Color kLedOn(250, 240, 70), kLedOff(30, 30, 14), kLedWindow(12, 14, 9);
 
 enum KeyColour { Grey, Yellow, White, Black, Small };
-enum Action { ActNone = 0, ActDiskPrev, ActDiskNext, ActDiskOpen };
+enum Action { ActNone = 0, ActDiskPrev, ActDiskNext, ActDiskOpen, ActFactoryTuning };
 
 struct Button {
     float cx, cy;        // centre of the key
@@ -85,6 +85,9 @@ public:
         add(752, r1, "Upper", Mirage::LoadUpper, White);
         add(752, r2, "Lower", Mirage::LoadLower, White);
 
+        // Factory tuning switch (an addition), above the power switch
+        buttons_.push_back({57, 100, "", -1, ActFactoryTuning, Grey, 30, 13});
+
         // Disk library (an addition: picks the disk image in the drive)
         buttons_.push_back({868, 152, "\xE2\x97\x80", -1, ActDiskPrev, Small, 22, 13});
         buttons_.push_back({896, 152, "\xE2\x96\xB6", -1, ActDiskNext, Small, 22, 13});
@@ -99,6 +102,7 @@ protected:
     void parameterChanged(uint32_t index, float value) override
     {
         if (index == kParamVolume) { volume_ = value; repaint(); }
+        if (index == kParamFactoryTuning) { factoryTuning_ = value > 0.5f; repaint(); }
     }
 
     void uiIdle() override
@@ -226,6 +230,7 @@ private:
     std::string status_;
     NanoImage wordmark_;
     float inLevel_ = 0.0f;
+    bool factoryTuning_ = true;
 
     void add(float cx, float cy, const char* label, int key, KeyColour c)
     {
@@ -266,6 +271,12 @@ private:
         groupBar(726, 778, "LOAD");
 
         for (size_t i = 0; i < buttons_.size(); ++i) drawKey(buttons_[i], int(i) == pressed_);
+        // Factory tuning label and LED
+        fontSize(8.5f); fillColor(kLabel); textAlign(ALIGN_CENTER | ALIGN_BOTTOM);
+        text(57, 80, "FACTORY", nullptr);
+        text(57, 90, "TUNING", nullptr);
+        beginPath(); circle(57, 117, 3.2f);
+        fillColor(factoryTuning_ ? Color(255, 60, 40) : Color(60, 18, 14)); fill();
 
         drawDrive();
         drawInputMeter(659, 146, 220);
@@ -560,6 +571,15 @@ private:
     void doAction(int a)
     {
         const auto& disks = plugin_->disks();
+        if (a == ActFactoryTuning) {
+            factoryTuning_ = !factoryTuning_;
+            setParameterValue(kParamFactoryTuning, factoryTuning_ ? 1.0f : 0.0f);
+            plugin_->engine().factoryTuning.store(factoryTuning_);
+            plugin_->savePreference("factory_tuning", factoryTuning_ ? 1.0f : 0.0f);
+            status_ = factoryTuning_ ? "Factory tuning on: Ensoniq disks at A440"
+                                     : "Factory tuning off: nominal 8 MHz clock (third-party disks)";
+            return;
+        }
         if (a == ActDiskOpen) {
             FileBrowserOptions opts;
             opts.title = "Insert a Mirage disk image (.img, .hfe, .edm)";

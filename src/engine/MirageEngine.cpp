@@ -94,6 +94,11 @@ bool MirageEngine::takeWrittenDisk(std::vector<uint8_t>& image, std::string& pat
 
 void MirageEngine::process(float* out, int frames, const float* in)
 {
+    if (factoryTuning.load() != appliedFactoryTuning_) {
+        appliedFactoryTuning_ = !appliedFactoryTuning_;
+        setClockTrimCents(appliedFactoryTuning_ ? kDefaultClockTrimCents : 0.0);
+    }
+
     // Editor input
     uiMidi_.drain([this](uint8_t b) { m_.midiIn(b); });
     const uint32_t k = keys_.load(), changed = k ^ appliedKeys_.load();
