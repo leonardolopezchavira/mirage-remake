@@ -7,6 +7,7 @@
 #include "MiragePlugin.hpp"
 #include "StandaloneHook.h"
 #include "EmbeddedData.h"
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -108,6 +109,11 @@ protected:
 
     void uiIdle() override
     {
+        if (repeatKey_ >= 0 && Clock::now() >= repeatNext_) {
+            repeatDown_ = !repeatDown_;
+            plugin_->engine().setPanelKey(repeatKey_, repeatDown_);
+            repeatNext_ = Clock::now() + std::chrono::milliseconds(65);
+        }
         auto& e = plugin_->engine();
         const uint8_t d0 = e.display(0), d1 = e.display(1);
         const bool motor = e.diskActive();
@@ -162,7 +168,7 @@ protected:
                 const float top = b.colour == Small ? b.cy - b.h / 2 - 3 : b.cy - b.h / 2 - 16;
                 if (x >= b.cx - b.w / 2 - 6 && x <= b.cx + b.w / 2 + 6 && y >= top && y <= b.cy + b.h / 2 + 5) {
                     pressed_ = int(i);
-                    if (b.key >= 0) plugin_->engine().setPanelKey(b.key, true);
+                    if (b.key >= 0) { plugin_->engine().setPanelKey(b.key, true); startRepeat(b.key); }
                     else doAction(b.action);
                     repaint();
                     return true;
@@ -175,6 +181,7 @@ protected:
             if (pressed_ >= 0) {
                 const auto& b = buttons_[size_t(pressed_)];
                 if (b.key >= 0) plugin_->engine().setPanelKey(b.key, false);
+                if (b.key == repeatKey_) stopRepeat();
                 pressed_ = -1;
                 repaint();
             }
@@ -215,7 +222,10 @@ protected:
         default: break;
         }
         if (key < 0) return false;
+        if (ev.press && key == repeatKey_) return true;      // the OS's own key repeat
         plugin_->engine().setPanelKey(key, ev.press);
+        if (ev.press) startRepeat(key);
+        else if (key == repeatKey_) stopRepeat();
         for (size_t i = 0; i < buttons_.size(); ++i)
             if (buttons_[i].key == key) pressed_ = ev.press ? int(i) : -1;
         repaint();
@@ -240,6 +250,27 @@ private:
     }
     NanoImage wordmark_;
     float inLevel_ = 0.0f;
+
+    // Auto-repeat for On/Up and Off/Down (an addition: the Mirage OS steps once per press).
+    // After a short pause the key is pulsed, 65 ms down / 65 ms up: the OS needs about 60 ms
+    // of each to see a press (measured), so this is as fast as it can step (~7.7 per second).
+    using Clock = std::chrono::steady_clock;
+    int repeatKey_ = -1;
+    bool repeatDown_ = false;
+    Clock::time_point repeatNext_;
+
+    void startRepeat(int key)
+    {
+        if (key != Mirage::Up && key != Mirage::Down) return;
+        repeatKey_ = key;
+        repeatDown_ = true;
+        repeatNext_ = Clock::now() + std::chrono::milliseconds(450);
+    }
+    void stopRepeat()
+    {
+        if (repeatKey_ >= 0) plugin_->engine().setPanelKey(repeatKey_, false);
+        repeatKey_ = -1;
+    }
     bool factoryTuning_ = true;
 
     void add(float cx, float cy, const char* label, int key, KeyColour c)

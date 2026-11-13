@@ -46,7 +46,9 @@ Behind the scenes that is roughly 6 seconds of machine time, run faster than rea
 - **Your disk folder:** `~/Library/Application Support/Mirage/Disks`. `.img` and `.hfe`
   files placed there appear in the ◀ ▶ list (read when the app or plug-in opens). Then use the Mirage's own keys:
   **LOAD LOWER** (or **LOAD UPPER**), then 1–3, then **ENTER**.
-- **Edit:** **PARAM**, two digits, **VALUE**, then ▲ ▼ or digits. The parameter card is in
+- **Edit:** **PARAM**, two digits, **VALUE**, then ▲ ▼. Holding ▲ or ▼ (on the panel or the
+  computer's arrow keys) repeats at about 7 steps per second, the fastest the OS accepts
+  presses (an addition: the hardware steps once per press). The parameter card is in
   `docs/` (see the Mirage manuals).
 - **Tuning:** Master Tune (parameter 21) stays at its default of 50. The factory library plays
   within ±3 cents of A440, because the emulated machine (CPU and sound chip together) runs
