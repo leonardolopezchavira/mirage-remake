@@ -16,7 +16,6 @@ MirageEngine::MirageEngine(const std::vector<uint8_t>& rom, const std::vector<ui
     // machine 13.5 cents slow puts the factory sounds at A440 and leaves sampled sounds in
     // tune, so Master Tune 50 is right for both.
     setClockTrimCents(kDefaultClockTrimCents);
-    setSampleTrimCents(kDefaultSampleTrimCents);
     designFilter();
     boot();
 }
@@ -133,29 +132,20 @@ void MirageEngine::process(float* out, int frames, const float* in)
     if (int(scratch_.size()) < need + 4) scratch_.resize(size_t(need) + 4);
     const float* inAnalog = nullptr;
     if (in) {
-        // host-rate input -> analog rate, through a ring so that the read position can run
-        // slightly slower than real time while sampling (sampleTrim_), then catch up again.
+        // host-rate input -> analog rate (linear interpolation; VCF 7 band-limits it)
         if (int(inScratch_.size()) < need + 4) inScratch_.resize(size_t(need) + 4);
         float peak = 0;
-        for (int i = 0; i < frames; ++i) {
-            peak = std::max(peak, std::fabs(in[i]));
-            inRing_[size_t(inWrite_ & (kInRing - 1))] = in[i];
-            ++inWrite_;
-        }
+        for (int i = 0; i < frames; ++i) peak = std::max(peak, std::fabs(in[i]));
         if (peak > inputPeak.load()) inputPeak.store(peak);
-        const bool slow = m_.sampling() && sampleTrim_ != 1.0;
-        const double startNormal = double(inWrite_ - frames) - 1.0;   // one sample of latency
-        if (!slow || inRead_ < double(inWrite_ - kInRing / 2)) inRead_ = startNormal;
-        const double perAnalog = double(frames) / need * (slow ? sampleTrim_ : 1.0);
         for (int k = 0; k < need; ++k) {
-            inRead_ += perAnalog;
-            const double pos = std::min(inRead_, double(inWrite_ - 1));
-            const int64_t i0 = int64_t(std::floor(pos));
-            const float fr = float(pos - double(i0));
-            const float a = inRing_[size_t(i0 & (kInRing - 1))];
-            const float b = inRing_[size_t((i0 + 1) & (kInRing - 1))];
+            const double pos = (k + 1) * double(frames) / need - 1.0;  // in host samples
+            const int i0 = int(std::floor(pos));
+            const float fr = float(pos - i0);
+            const float a = i0 < 0 ? lastIn_ : in[std::min(i0, frames - 1)];
+            const float b = in[std::min(std::max(i0 + 1, 0), frames - 1)];
             inScratch_[size_t(k)] = a + (b - a) * fr;
         }
+        if (frames > 0) lastIn_ = in[frames - 1];
         inAnalog = inScratch_.data();
     }
     m_.render(scratch_.data(), need, inAnalog);

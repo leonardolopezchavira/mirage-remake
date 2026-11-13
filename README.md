@@ -48,16 +48,16 @@ Behind the scenes that is roughly 6 seconds of machine time, run faster than rea
   **LOAD LOWER** (or **LOAD UPPER**), then 1–3, then **ENTER**.
 - **Edit:** **PARAM**, two digits, **VALUE**, then ▲ ▼ or digits. The parameter card is in
   `docs/` (see the Mirage manuals).
-- **Tuning:** Master Tune (parameter 21) stays at its default of 50 and everything plays at
-  A440: the factory library within ±3 cents, and a sampled 440 Hz tone plays back at 440 Hz. To get there, the emulated machine (CPU and sound chip together) runs 13.5 cents
-  slower than the nominal 8 MHz. At exactly 8 MHz the factory disks play about 13.5 cents
-  sharp, while sampled sounds, recorded and played on the same clock, are unaffected by the
-  clock either way. The **FACTORY TUNING** switch above the power switch turns the clock
-  change off (LED dark): the machine then runs at exactly 8 MHz, like the hardware, which
-  suits third-party libraries tuned on real Mirages (e.g. Sound Cells, about 20 cents flat
-  with factory tuning on). It is a host-automatable parameter in the plug-ins, and the app
-  remembers it. Their small remaining offset (the OS plays a fresh sample 3.3 cents above
-  the recorded pitch) is removed by feeding the input 3.3 cents slower while sampling.
+- **Tuning:** Master Tune (parameter 21) stays at its default of 50. The factory library plays
+  within ±3 cents of A440, because the emulated machine (CPU and sound chip together) runs
+  13.5 cents slower than the nominal 8 MHz; at exactly 8 MHz the factory disks play about
+  13.5 cents sharp. Sounds you sample are recorded and played on the same clock, so the clock
+  doesn't change them: as on the hardware, the OS plays a fresh sample about 3 cents above
+  the recorded pitch (440 Hz in, about 440.8 Hz out).
+- **FACTORY TUNING** (the switch above the power switch) turns the clock change off (LED
+  dark): the machine then runs at exactly 8 MHz, like the hardware, which suits third-party
+  libraries tuned on real Mirages (e.g. Sound Cells, about 20 cents flat with factory tuning
+  on). It is a host-automatable parameter in the plug-ins, and the app remembers it.
 - Computer keys in the editor: digits, Enter, Esc (Cancel), ↑ ↓, P (Param), V (Value).
 - **Saving:** when the Mirage writes to a disk (save sound / config / format), the image is
   saved to `~/Library/Application Support/Mirage/Disks`. Copies of bundled disks go there too.
