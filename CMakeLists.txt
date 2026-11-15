@@ -11,7 +11,7 @@ endif()
 # ---------------------------------------------------------------- emulator + engine
 add_library(mirage_engine STATIC
   src/emu/Cpu6809.cpp src/emu/Via6522.cpp src/emu/Wd1772.cpp src/emu/Es5503.cpp src/emu/Mirage.cpp
-  src/engine/MirageEngine.cpp src/engine/DiskImage.cpp src/engine/MasosLink.cpp)
+  src/engine/MirageEngine.cpp src/engine/DiskImage.cpp src/engine/MasosLink.cpp src/engine/AudioFile.cpp src/engine/SampleImport.cpp)
 target_include_directories(mirage_engine PUBLIC src)
 
 # Boot ROM + default boot disk compiled in.
@@ -31,6 +31,8 @@ add_executable(mirage_cli tools/mirage_cli.cpp)
 target_link_libraries(mirage_cli PRIVATE mirage_engine)
 add_executable(mirage_disk_check tests/disk_check.cpp)
 target_link_libraries(mirage_disk_check PRIVATE mirage_engine)
+add_executable(mirage_import_check tests/import_check.cpp)
+target_link_libraries(mirage_import_check PRIVATE mirage_engine mirage_embedded)
 add_executable(mirage_masos_check tests/masos_check.cpp)
 target_link_libraries(mirage_masos_check PRIVATE mirage_engine mirage_embedded)
 add_executable(mirage_engine_check tests/engine_check.cpp)

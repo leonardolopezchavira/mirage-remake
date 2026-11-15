@@ -63,6 +63,14 @@ public:
     // Power the Mirage off and on: it boots again from the disk in the drive (the way to
     // load another operating system, as on the hardware). Done by the audio thread.
     void restart() { restartPending_.store(true); }
+    // Audio file import (editor thread): beginFileInput() replaces the sampling input with
+    // silence and holds the file (mono, at the host rate); playFileInput() plays it from the
+    // start; endFileInput() gives the input back. fileInputPlayed() turns true at its end.
+    void beginFileInput(std::vector<float> samples);
+    void playFileInput();
+    void endFileInput();
+    bool fileInputPlayed() const { return filePlayed_.load(); }
+    double sampleRate() const { return fs_; }
     void insertDisk(std::vector<uint8_t> image, const std::string& name, const std::string& path);
     uint8_t display(int digit) const { return digit ? disp1_.load() : disp0_.load(); }
     bool diskActive() const { return motor_.load(); }
@@ -101,6 +109,10 @@ private:
 
     ByteRing uiMidi_, extMidi_, midiOut_, editorOut_;
     std::atomic<bool> restartPending_{false};
+    std::mutex fileLock_;
+    std::vector<float> filePending_, fileBuf_, fileScratch_;
+    size_t filePos_ = 0;
+    std::atomic<bool> fileMode_{false}, fileStart_{false}, filePlayed_{false};
     std::atomic<uint32_t> keys_{0}, appliedKeys_{0};
 
     std::mutex diskLock_;   // pending disk + written disk

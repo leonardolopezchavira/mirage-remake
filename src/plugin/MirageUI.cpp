@@ -8,6 +8,10 @@
 #include "StandaloneHook.h"
 #include "EmbeddedData.h"
 #include "EditorView.hpp"
+#include "../engine/AudioFile.h"
+#include "../engine/SampleImport.h"
+#include <fstream>
+#include <iterator>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -138,12 +142,23 @@ protected:
         if (powerOffTicks_ > 0 && --powerOffTicks_ == 0) repaint();
         if (wantEditor_ != editorOpen_) setEditorOpen(wantEditor_);
         idleEditor(motor);
+        idleImport();
+        // Development: MIRAGE_IMPORT_FILE=<audio file> imports it once the Mirage is up.
+        if (!devImportDone_ && std::getenv("MIRAGE_IMPORT_FILE") && nowMs() - openedMs_ > 6000) {
+            devImportDone_ = true;
+            startImport(std::getenv("MIRAGE_IMPORT_FILE"));
+        }
         const std::string saved = plugin_->flushWrittenDisk();
         if (!saved.empty()) { showStatus("Saved to your disk folder"); repaint(); }
     }
 
     void uiFileBrowserSelected(const char* filename) override
     {
+        if (browsingImport_) {
+            browsingImport_ = false;
+            if (filename != nullptr) startImport(filename);
+            return;
+        }
         if (filename == nullptr) return;
         std::string err;
         if (plugin_->loadDiskFile(filename, &err)) {
@@ -179,6 +194,7 @@ protected:
         if (ev.button != 1) return false;
         if (ev.press && editorOpen_ && y >= kRackH) {
             editor_->mouseDown(x, y - kRackH);
+            if (editor_->takeImportRequest()) chooseImportFile();
             repaint();
             return true;
         }
@@ -318,6 +334,71 @@ private:
         if (editorOpen_ && !link.connected() && now >= nextRetryMs_) { link.requestAll(); nextRetryMs_ = now + 3000; }
         link.pump(now, [&](const uint8_t* p, int n) { e.postMidi(p, n); });
         if (link.revision() != editorRev_) { editorRev_ = link.revision(); if (editorOpen_) repaint(); }
+    }
+
+    // ------------------------------------------------------------------ audio file import
+    mirage::SampleImport import_;
+    bool browsingImport_ = false, devImportDone_ = false;
+    double openedMs_ = nowMs();
+    std::string importName_;
+    int importHalf_ = 0;
+
+    void chooseImportFile()
+    {
+        if (import_.state() == mirage::SampleImport::State::Running) return;
+        FileBrowserOptions opts;
+        opts.title = "Import an audio file (WAV or AIFF)";
+        const std::string dir = plugin_->preferenceText("import_dir", "");
+        if (!dir.empty()) opts.startDir = dir.c_str();
+        browsingImport_ = true;
+        openFileBrowser(opts);
+    }
+
+    void startImport(const std::string& path)
+    {
+        std::ifstream f(path, std::ios::binary);
+        std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), {});
+        mirage::AudioData audio;
+        std::string err;
+        const std::string name = path.substr(path.find_last_of('/') + 1);
+        if (bytes.empty() || !mirage::readAudioFile(bytes, audio, err)) {
+            showStatus(name + ": " + (bytes.empty() ? std::string("could not read the file") : err));
+            return;
+        }
+        const size_t slash = path.find_last_of('/');
+        if (slash != std::string::npos) plugin_->savePreferenceText("import_dir", path.substr(0, slash));
+        auto& link = plugin_->masos();
+        if (link.connected()) {
+            // MASOS's own sampling doesn't work in the emulator yet: it records nothing.
+            showStatus("Import needs OS 3.2 for now: pick os32, click POWER, then import");
+            return;
+        }
+        importHalf_ = link.currentHalf();
+        importName_ = name;
+        import_.start(plugin_->engine(), audio.mono, audio.sampleRate, importHalf_, nowMs());
+        editor_->setImporting(true);
+        showStatus(std::string("Sampling ") + name + (importHalf_ ? " into the upper half" : " into the lower half"));
+        repaint();
+    }
+
+    void idleImport()
+    {
+        if (import_.state() != mirage::SampleImport::State::Running) return;
+        const auto st = import_.step(plugin_->engine(), nowMs());
+        if (st == mirage::SampleImport::State::Running) return;
+        editor_->setImporting(false);
+        if (st == mirage::SampleImport::State::Done) {
+            if (import_.endedOnSF())
+                showStatus(importName_ + " sampled into the " + (importHalf_ ? "upper" : "lower") +
+                           " half. Save: PARAM 1 " + (importHalf_ ? "2" : "1") + ", slot, ENTER");
+            else
+                showStatus(importName_ + " sampled. The OS is asking a question: answer it or press CANCEL");
+            plugin_->masos().requestAll();
+        } else {
+            showStatus(import_.message());
+        }
+        import_.reset();
+        repaint();
     }
 
     void powerCycle()

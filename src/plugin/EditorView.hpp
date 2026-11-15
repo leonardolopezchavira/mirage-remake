@@ -43,13 +43,15 @@ public:
             if (t.kind == TabHalf) sel = t.index == h;
             if (t.kind == TabProgram) sel = t.index == link_.half(h).program;
             if (t.kind == TabWave) sel = t.index == link_.half(h).wavesample;
-            pill(g, t.x, t.y, t.w, t.h, t.text, sel, on);
+            pill(g, t.x, t.y, t.w, t.h, t.text, sel, on || t.kind == TabHalf);
         }
         label(g, 302, 23, "PROGRAM", 9, kDim, NanoVG::ALIGN_RIGHT, 1.5f);
         label(g, 532, 23, "WAVESAMPLE", 9, kDim, NanoVG::ALIGN_RIGHT, 1.5f);
         pill(g, kRefresh.x, kRefresh.y, kRefresh.w, kRefresh.h, "Read again", false, true);
         pill(g, kKeymapBtn.x, kKeymapBtn.y, kKeymapBtn.w, kKeymapBtn.h, "Key map", keymapPage_, true);
-        label(g, 976, 24, on ? "Connected to MASOS" : "Not connected", 10,
+        pill(g, kImportBtn.x, kImportBtn.y, kImportBtn.w, kImportBtn.h, importing_ ? "Importing\xE2\x80\xA6" : "Import\xE2\x80\xA6",
+             importing_, true);
+        label(g, 890, 24, on ? "Connected to MASOS" : "Not connected", 10,
               on ? Color(120, 220, 120) : Color(230, 140, 90), NanoVG::ALIGN_RIGHT);
 
         if (keymapPage_) {
@@ -64,6 +66,9 @@ public:
             label(g, kEdW / 2, 228, "Open\xE2\x80\xA6 MASOS_BE-v1.0.0.hfe (from BoxedEar), then click POWER so the Mirage boots from it.", 11,
                   Color(200, 200, 200), NanoVG::ALIGN_CENTER);
             label(g, kEdW / 2, 250, "The editor connects by itself once it is running.", 11, Color(200, 200, 200), NanoVG::ALIGN_CENTER);
+            label(g, kEdW / 2, 290, "Import\xE2\x80\xA6 works under OS 3.2: it samples a WAV or AIFF file through the Mirage's own input", 11,
+                  kYellow, NanoVG::ALIGN_CENTER);
+            label(g, kEdW / 2, 310, "into the half chosen with Lower / Upper.", 11, kYellow, NanoVG::ALIGN_CENTER);
         }
     }
 
@@ -73,6 +78,13 @@ public:
         const int h = link_.currentHalf();
         if (hit(kRefresh, x, y)) { link_.requestAll(); return true; }
         if (hit(kKeymapBtn, x, y)) { keymapPage_ = !keymapPage_; return true; }
+        if (hit(kImportBtn, x, y)) { if (!importing_) importRequested_ = true; return true; }
+        // Lower / Upper also pick the half an import goes to, so they work without MASOS too
+        for (const auto& t : tabs_)
+            if (t.kind == TabHalf && hit(t, x, y)) {
+                link_.selectWavesample(t.index, link_.half(t.index).wavesample);
+                return true;
+            }
         if (!link_.connected()) return y > 0;
         for (const auto& t : tabs_) {
             if (!hit(t, x, y)) continue;
@@ -131,6 +143,10 @@ public:
         return false;
     }
 
+    // The Import… button was clicked (the panel opens the file browser).
+    bool takeImportRequest() { const bool r = importRequested_; importRequested_ = false; return r; }
+    void setImporting(bool on) { importing_ = on; }
+
     void mouseUp() { dragSlider_ = -1; dragMarker_ = 0; dragEdge_ = -1; dragGrid_ = false; }
     bool dragging() const { return dragSlider_ >= 0 || dragMarker_ != 0 || dragEdge_ >= 0 || dragGrid_; }
 
@@ -174,9 +190,10 @@ private:
     std::vector<Tab> tabs_;
     std::vector<Slider> sliders_;
     int dragSlider_ = -1, dragMarker_ = 0, dragEdge_ = -1, hoverWs_ = -1;
-    bool keymapPage_ = false, dragGrid_ = false;
+    bool keymapPage_ = false, dragGrid_ = false, importRequested_ = false, importing_ = false;
     const Rect kRefresh{1088, 12, 92, 20};
     const Rect kKeymapBtn{990, 12, 90, 20};
+    const Rect kImportBtn{900, 12, 82, 20};
     const Rect kWave{780, 64, 400, 150};
 
     template <class R> static bool hit(const R& r, float x, float y)

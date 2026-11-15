@@ -37,6 +37,26 @@ void MirageEngine::boot()
     m_.fdc().clearDirty();
 }
 
+void MirageEngine::beginFileInput(std::vector<float> samples)
+{
+    {
+        std::lock_guard<std::mutex> l(fileLock_);
+        filePending_ = std::move(samples);
+    }
+    filePlayed_.store(false);
+    fileMode_.store(true);
+}
+
+void MirageEngine::playFileInput()
+{
+    fileStart_.store(true);
+}
+
+void MirageEngine::endFileInput()
+{
+    fileMode_.store(false);
+}
+
 void MirageEngine::setSampleRate(double fs)
 {
     fs_ = fs;
@@ -137,6 +157,23 @@ void MirageEngine::process(float* out, int frames, const float* in)
     const double needF = phase_ + frames * step_;
     const int need = int(std::floor(needF));
     if (int(scratch_.size()) < need + 4) scratch_.resize(size_t(need) + 4);
+    // Audio file import: a file replaces the host input (silence before and after it).
+    if (fileMode_.load()) {
+        if (fileStart_.load() && fileLock_.try_lock()) {
+            fileStart_.store(false);
+            fileBuf_.swap(filePending_);
+            filePending_.clear();
+            filePos_ = 0;
+            fileLock_.unlock();
+        }
+        if (int(fileScratch_.size()) < frames) fileScratch_.resize(size_t(frames));
+        for (int i = 0; i < frames; ++i)
+            fileScratch_[size_t(i)] = filePos_ < fileBuf_.size() ? fileBuf_[filePos_++] : 0.0f;
+        filePlayed_.store(filePos_ >= fileBuf_.size());
+        in = fileScratch_.data();
+    } else if (!fileBuf_.empty()) {
+        fileBuf_.clear();
+    }
     const float* inAnalog = nullptr;
     if (in) {
         // host-rate input -> analog rate (linear interpolation; VCF 7 band-limits it)

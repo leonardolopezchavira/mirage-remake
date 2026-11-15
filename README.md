@@ -139,6 +139,23 @@ itself. Load your sounds afterwards; the editor reads them in when the drive sto
 change the sound in memory, as on the hardware: save with **PARAM 1 1** / **1 2**, a slot
 and **ENTER** to keep them. It works in the plug-ins too.
 
+### Importing an audio file
+
+**Import…** in the editor's header samples a WAV or AIFF file (any rate, mono or stereo,
+8–32-bit or float) into the half chosen with **Lower / Upper**. Nothing is copied in
+digitally: the file is played into the Mirage's sampling input while **SAMPLE** and
+**ENTER** are pressed for you, so it goes through the input filter (VCF 7, parameter 74), the
+8-bit converter and the OS's own sampling routine, with the current settings (73 sampling
+time, 75 line/mic, 76 threshold, 77 multisample), exactly as a sound arriving at the input
+jack would. Recording starts where the file crosses the threshold and lasts as long as a
+normal sample (about 2 seconds at the default rate); the file is played at a fixed level
+(peak −7 dB). Then play, loop and save it as usual (**PARAM 1 1** or **1 2**, a slot,
+**ENTER**).
+
+This needs **OS 3.2** (or another Ensoniq OS) to be running: under MASOS the emulated Mirage
+doesn't sample yet (MASOS shows a message and records nothing), so the import is refused.
+Import under OS 3.2, save the sound to a disk, and load it under MASOS_BE to edit it.
+
 ### Editors (BoxedEar Visage) and MIDI out
 
 The standalone app creates a virtual MIDI port named **Mirage Remake**, as both a source
@@ -161,6 +178,8 @@ The port exists in the standalone app only. In a DAW, use the DAW's own MIDI rou
 plug-ins have no MIDI output yet).
 
 ## Not done yet
+- **Sampling under MASOS** (v2 or MASOS_BE) doesn't work in the emulator yet: after SAMPLE,
+  MASOS waits for keys instead of reading the input and ends with a message. OS 3.2 samples.
 - **The DSK-8 keyboard controller** (R6500/11) is not emulated. Play from MIDI, as with the
   DMS-8 rack.
 - **Plug-in state** stores the inserted disk's path only, not the full machine state. A sound
