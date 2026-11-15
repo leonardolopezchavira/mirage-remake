@@ -79,7 +79,19 @@ int main()
     const double hz = zc / 2.0 / ((rec.size() - 9601) / 48000.0);
     std::printf("sampling: level-detect %d, finished (SF) %d, playback %.1f Hz\n", levelDetect, finished, hz);
 
-    bool ok = midiOut && quiet < 0.01 && loud > 0.05 && rt > 2.0 && levelDetect && finished && std::fabs(hz - 440.8) < 2.0;
+    // POWER off and on: the Mirage boots again from the disk in the drive (OS 3.2 sends its
+    // program change again once it is up).
+    e.drainMidiOut([](uint8_t) {});
+    e.restart();
+    std::vector<uint8_t> again;
+    for (int b = 0; b < 3000 && again.empty(); ++b) {   // up to 16 s
+        e.process(buf.data(), 256);
+        e.drainMidiOut([&](uint8_t x) { again.push_back(x); });
+    }
+    const bool rebooted = !again.empty() && again[0] == 0xC0;
+    std::printf("restart: %s\n", rebooted ? "booted again" : "did not boot");
+
+    bool ok = rebooted && midiOut && quiet < 0.01 && loud > 0.05 && rt > 2.0 && levelDetect && finished && std::fabs(hz - 440.8) < 2.0;
     std::printf("%s\n", ok ? "ENGINE OK" : "ENGINE FAIL");
     return ok ? 0 : 1;
 }

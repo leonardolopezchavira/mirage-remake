@@ -58,6 +58,9 @@ public:
     bool postExternalMidi(const uint8_t* p, int n) { return extMidi_.push(p, n); }
     // MIDI OUT of the emulated Mirage: bytes in the order the OS sent them, for one reader thread.
     template <class F> void drainMidiOut(F&& f) { midiOut_.drain(f); }
+    // Power the Mirage off and on: it boots again from the disk in the drive (the way to
+    // load another operating system, as on the hardware). Done by the audio thread.
+    void restart() { restartPending_.store(true); }
     void insertDisk(std::vector<uint8_t> image, const std::string& name, const std::string& path);
     uint8_t display(int digit) const { return digit ? disp1_.load() : disp0_.load(); }
     bool diskActive() const { return motor_.load(); }
@@ -95,6 +98,7 @@ private:
     float lastIn_ = 0.0f;
 
     ByteRing uiMidi_, extMidi_, midiOut_;
+    std::atomic<bool> restartPending_{false};
     std::atomic<uint32_t> keys_{0}, appliedKeys_{0};
 
     std::mutex diskLock_;   // pending disk + written disk

@@ -99,6 +99,11 @@ void MirageEngine::process(float* out, int frames, const float* in)
         setClockTrimCents(appliedFactoryTuning_ ? kDefaultClockTrimCents : 0.0);
     }
 
+    if (restartPending_.exchange(false)) {
+        m_.reset();                 // the disk stays in the drive
+        appliedKeys_.store(0);      // the OS scans the keypad from scratch
+    }
+
     // Editor input
     uiMidi_.drain([this](uint8_t b) { m_.midiIn(b); });
     extMidi_.drain([this](uint8_t b) { m_.midiIn(b); });

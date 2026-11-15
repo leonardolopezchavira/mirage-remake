@@ -7,6 +7,7 @@
 #include "MiragePlugin.hpp"
 #include "StandaloneHook.h"
 #include "EmbeddedData.h"
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -129,6 +130,7 @@ protected:
             repaint();
         }
         if (statusTicks_ > 0 && --statusTicks_ == 0) { status_.clear(); repaint(); }
+        if (powerOffTicks_ > 0 && --powerOffTicks_ == 0) repaint();
         const std::string saved = plugin_->flushWrittenDisk();
         if (!saved.empty()) { showStatus("Saved to your disk folder"); repaint(); }
     }
@@ -140,6 +142,7 @@ protected:
         if (plugin_->loadDiskFile(filename, &err)) {
             sel_ = -1;
             showStatus("");
+            hintIfOsDisk(filename);
         } else {
             showStatus(err);
         }
@@ -161,6 +164,7 @@ protected:
         const float x = float(ev.pos.getX()) / s, y = float(ev.pos.getY()) / s;
         if (ev.button != 1) return false;
         if (ev.press) {
+            if (x >= 34 && x <= 80 && y >= 124 && y <= 212) { powerCycle(); return true; }
             if (x >= 140 && x <= 205 && y >= kVolTop - 8 && y <= kVolBot + 8) { draggingVol_ = true; setVolumeFromY(y); return true; }
             for (size_t i = 0; i < buttons_.size(); ++i) {
                 const auto& b = buttons_[i];
@@ -205,6 +209,10 @@ protected:
 
     bool onKeyboard(const KeyboardEvent& ev) override
     {
+        if (ev.key == 'r' || ev.key == 'R') {      // POWER off and on
+            if (ev.press) powerCycle();
+            return true;
+        }
         int key = -1;
         switch (ev.key) {
         case '0': key = Mirage::K0Prog; break;
@@ -219,6 +227,8 @@ protected:
         case kKeyDown: key = Mirage::Down; break;
         case 'p': key = Mirage::Param; break;
         case 'v': key = Mirage::Value; break;
+        case 'u': case 'U': key = Mirage::LoadUpper; break;
+        case 'l': case 'L': key = Mirage::LoadLower; break;
         default: break;
         }
         if (key < 0) return false;
@@ -241,6 +251,25 @@ private:
     float volume_ = 0.8f;
     std::string status_;
     int statusTicks_ = 0;   // idle calls left before the status message clears
+    int powerOffTicks_ = 0; // idle calls left with the POWER rocker drawn off
+
+    void powerCycle()
+    {
+        plugin_->engine().restart();
+        powerOffTicks_ = 12;
+        showStatus("Restarting: booting from the disk in the drive");
+    }
+
+    // After a disk goes in: an operating-system disk only takes over when the Mirage boots.
+    void hintIfOsDisk(const std::string& path)
+    {
+        std::string lower;
+        for (char c : path.substr(path.find_last_of('/') == std::string::npos ? 0 : path.find_last_of('/') + 1))
+            lower += char(std::tolower((unsigned char)c));
+        if (lower.rfind("os", 0) == 0 || lower.find("masos") != std::string::npos ||
+            lower.find("format") != std::string::npos || lower.rfind("fmt", 0) == 0)
+            showStatus("To boot this OS disk, click POWER (or press R)");
+    }
 
     void showStatus(const std::string& s)
     {
@@ -288,11 +317,12 @@ private:
 
         drawEnsoniqLogo(10, 14, 144, 26);
 
-        // POWER rocker (always on)
+        // POWER rocker (an addition: click it to power the Mirage off and on, which boots it
+        // from the disk in the drive). Drawn switched off for a moment after a click.
         beginPath(); roundedRect(38, 128, 38, 80, 3); fillColor(Color(14, 15, 17)); fill();
         beginPath(); roundedRect(43, 133, 28, 70, 2);
         fillPaint(linearGradient(43, 133, 43, 203, Color(46, 48, 52), Color(24, 25, 28))); fill();
-        beginPath(); rect(43, 133, 28, 34); fillColor(Color(56, 58, 63)); fill();
+        beginPath(); rect(43, powerOffTicks_ > 0 ? 169 : 133, 28, 34); fillColor(Color(56, 58, 63)); fill();
 
         drawVolume();
         drawDisplay();
@@ -648,7 +678,9 @@ private:
         if (a == ActDiskPrev) sel_ = sel_ <= 0 ? int(disks.size()) - 1 : sel_ - 1;
         if (a == ActDiskNext) sel_ = sel_ < 0 || sel_ >= int(disks.size()) - 1 ? 0 : sel_ + 1;
         std::string err;
-        showStatus(plugin_->loadDiskFile(disks[size_t(sel_)].path, &err) ? std::string() : err);
+        const bool ok = plugin_->loadDiskFile(disks[size_t(sel_)].path, &err);
+        showStatus(ok ? std::string() : err);
+        if (ok) hintIfOsDisk(disks[size_t(sel_)].path);
     }
 
     void noteOn(int n)

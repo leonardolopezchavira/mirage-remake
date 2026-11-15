@@ -60,7 +60,13 @@ Behind the scenes that is roughly 6 seconds of machine time, run faster than rea
   dark): the machine then runs at exactly 8 MHz, like the hardware, which suits third-party
   libraries tuned on real Mirages (e.g. Sound Cells, about 20 cents flat with factory tuning
   on). It is a host-automatable parameter in the plug-ins, and the app remembers it.
-- Computer keys in the editor: digits, Enter, Esc (Cancel), ↑ ↓, P (Param), V (Value).
+- Computer keys in the editor: digits, Enter, Esc (Cancel), ↑ ↓, P (Param), V (Value),
+  U (Load Upper), L (Load Lower), R (power off and on). Holding U and L together loads both
+  halves, as pressing both LOAD keys does on the hardware.
+- **POWER** (an addition): click the power switch to turn the Mirage off and on. It then
+  boots from the disk in the drive, the hardware's way of loading another operating system:
+  inserting a disk never replaces the OS that is running. Use it after inserting MASOS, the
+  formatter disk or any other OS disk.
 - **New disks:** **New** (next to Open…) creates a blank formatted disk with OS 3.2,
   `My Disk 1.img`, `My Disk 2.img`… in `~/Library/Application Support/Mirage/Disks`, and
   inserts it. Save into it with the Mirage's own commands: **PARAM 1 1** (lower sound) or
@@ -115,8 +121,9 @@ keyboards chosen in Settings. Any editor, librarian or DAW on the Mac can use it
 To use [BoxedEar Visage](https://boxedear.com/software/visage.html):
 1. Download Visage and the MASOS_BE disk from BoxedEar (they are BoxedEar's and are not
    included here).
-2. In Mirage, **Open…** `MASOS_BE-v1.0.0.hfe`. It boots like the hardware does from a Gotek;
-   then load your sounds from your sound disks as usual.
+2. In Mirage, **Open…** `MASOS_BE-v1.0.0.hfe`, then click **POWER** (or press R) so the
+   Mirage boots from it, as a hardware Mirage does when switched on with the disk in. Load
+   your sounds from your sound disks as usual afterwards.
 3. In Visage, choose **Mirage Remake** for both MIDI input and MIDI output.
 
 MASOS_BE sends its configuration and both program dumps at boot and answers the requests

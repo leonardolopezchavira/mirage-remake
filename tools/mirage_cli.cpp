@@ -5,6 +5,7 @@
 //   key <name> [ms]      press a front-panel key (default 100 ms)
 //   midi <hex bytes...>  send MIDI bytes (comma or space separated hex in one arg: 90,3c,7f)
 //   wav <file> <seconds> render audio to a 16-bit WAV at 125 kHz -> 44.1 kHz
+//   keys <A+B>           hold several keys together (e.g. LOADUPPER+LOADLOWER)
 //   midiout              print (and clear) the bytes the Mirage sent on MIDI OUT
 //   show                 print the display
 //   regs                 print CPU registers
@@ -86,6 +87,8 @@ int main(int argc, char** argv)
             std::vector<uint8_t> img; std::string err;
             if (!decodeDiskImage(readFile(p), img, err) || !m.fdc().insert(img))
                 std::printf("disk: bad image %s %s\n", p.c_str(), err.c_str());
+        } else if (c == "reset") {          // power off and on, disk stays in
+            m.reset();
         } else if (c == "eject") {
             m.fdc().eject();
         } else if (c == "run") {
@@ -99,6 +102,21 @@ int main(int argc, char** argv)
             m.setKey(it->second, true);
             m.run(int64_t(0.1 * Mirage::kCpuHz));
             m.setKey(it->second, false);
+            m.run(int64_t(0.1 * Mirage::kCpuHz));
+        } else if (c == "down" || c == "up") {   // down/up <KEY>: change one key, no waiting
+            auto it = kKeys.find(next());
+            if (it != kKeys.end()) m.setKey(it->second, c == "down");
+        } else if (c == "keys") {          // keys A+B [ms]: hold several keys together
+            std::string list = next();
+            std::vector<int> ks;
+            for (size_t a = 0, b; a <= list.size(); a = b + 1) {
+                b = list.find('+', a); if (b == std::string::npos) b = list.size();
+                auto it = kKeys.find(list.substr(a, b - a));
+                if (it != kKeys.end()) ks.push_back(it->second);
+            }
+            for (int k : ks) m.setKey(k, true);
+            m.run(int64_t(0.3 * Mirage::kCpuHz));
+            for (int k : ks) m.setKey(k, false);
             m.run(int64_t(0.1 * Mirage::kCpuHz));
         } else if (c == "midi") {
             std::string hex = next();
