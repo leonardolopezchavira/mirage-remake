@@ -26,6 +26,7 @@
 namespace dpf = DISTRHO_NAMESPACE;
 
 void mirageStartVirtualMidi();  // VirtualMidi.mm
+void mirageVirtualMidiStats(uint64_t& inBytes, uint64_t& inSysex, uint64_t& outBytes, uint64_t& outSysex);
 
 static NSString* const kDeviceKey = @"AudioOutputDevice";
 static NSString* const kSampleRateKey = @"SampleRate";
@@ -74,6 +75,8 @@ static NSTextField* makeLabel(NSString* text) {
 @property(strong) NSTextField* inputStatus;
 @property(strong) NSStackView* midiStack;
 @property(strong) NSTextField* statusLabel;
+@property(strong) NSTextField* portStats;
+@property(strong) NSTimer* portTimer;
 + (instancetype)shared;
 - (void)applySavedSettings;
 - (void)installMenu;
@@ -196,10 +199,26 @@ static NSTextField* makeLabel(NSString* text) {
 
 // ---------------------------------------------------------------- settings window
 
+- (void)updatePortStats {
+    uint64_t inBytes, inSysex, outBytes, outSysex;
+    mirageVirtualMidiStats(inBytes, inSysex, outBytes, outSysex);
+    self.portStats.stringValue = [NSString stringWithFormat:
+        @"Mirage Remake port - received: %llu bytes (%llu SysEx), sent: %llu bytes (%llu SysEx). Log: ~/Library/Logs/Mirage/MIDI.log",
+        (unsigned long long)inBytes, (unsigned long long)inSysex, (unsigned long long)outBytes, (unsigned long long)outSysex];
+}
+
 - (void)showSettings:(id)sender {
     (void)sender;
     if (self.panel == nil) [self buildPanel];
     [self refresh];
+    [self updatePortStats];
+    if (self.portTimer == nil) {
+        __weak MirageSettingsController* weakSelf = self;
+        self.portTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer* timer) {
+            (void)timer;
+            [weakSelf updatePortStats];
+        }];
+    }
     [self.panel makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
 }
@@ -266,7 +285,10 @@ static NSTextField* makeLabel(NSString* text) {
     editorNote.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
     editorNote.textColor = NSColor.secondaryLabelColor;
     [editorNote.widthAnchor constraintLessThanOrEqualToConstant:420].active = YES;
-    NSStackView* content = [NSStackView stackViewWithViews:@[ audioGrid, midiTitle, self.midiStack, rescan, editorNote ]];
+    self.portStats = [NSTextField labelWithString:@""];
+    self.portStats.font = [NSFont monospacedDigitSystemFontOfSize:NSFont.smallSystemFontSize weight:NSFontWeightRegular];
+    self.portStats.textColor = NSColor.secondaryLabelColor;
+    NSStackView* content = [NSStackView stackViewWithViews:@[ audioGrid, midiTitle, self.midiStack, rescan, editorNote, self.portStats ]];
     content.orientation = NSUserInterfaceLayoutOrientationVertical;
     content.alignment = NSLayoutAttributeLeading;
     content.spacing = 12;

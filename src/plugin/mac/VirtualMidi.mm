@@ -14,7 +14,10 @@
 #include <CoreMIDI/CoreMIDI.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <cstdint>
+#include <cstdio>
+#include <string>
 #include <vector>
 
 #include "StandaloneHook.h"
@@ -33,9 +36,56 @@ MIDIClientRef gClient = 0;
 MIDIEndpointRef gSource = 0, gDestination = 0;
 dispatch_source_t gTimer = nil;
 
-// CoreMIDI wants each packet to hold complete messages (SysEx may be split across packets but
-// not mixed with other messages). The ACIA hands over a raw byte stream, so this reassembles
-// it: running status is expanded, SysEx is passed on in chunks as it arrives.
+// --- diagnostics ------------------------------------------------------------------------
+// Byte counters (shown in Settings) and a log of every message in both directions,
+// ~/Library/Logs/Mirage/MIDI.log (rewritten at each launch, long SysEx shortened).
+
+std::atomic<uint64_t> gInBytes{0}, gOutBytes{0}, gInSysex{0}, gOutSysex{0};
+dispatch_queue_t gLogQueue = nil;
+FILE* gLog = nullptr;
+size_t gLogSize = 0;
+CFAbsoluteTime gLogStart = 0;
+
+void openLog()
+{
+    NSString* dir = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Logs/Mirage"];
+    [NSFileManager.defaultManager createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    gLog = std::fopen([dir stringByAppendingPathComponent:@"MIDI.log"].fileSystemRepresentation, "w");
+    gLogQueue = dispatch_queue_create("mirage.midi-log", DISPATCH_QUEUE_SERIAL);
+    gLogStart = CFAbsoluteTimeGetCurrent();
+}
+
+void logText(const std::string& line)
+{
+    if (!gLog || !gLogQueue) return;
+    const double t = CFAbsoluteTimeGetCurrent() - gLogStart;
+    std::string copy = line;
+    dispatch_async(gLogQueue, ^{
+        if (gLogSize > (4u << 20)) return;  // 4 MB is plenty
+        gLogSize += size_t(std::fprintf(gLog, "%9.3f  %s\n", t, copy.c_str()));
+        std::fflush(gLog);
+    });
+}
+
+void logBytes(const char* what, const uint8_t* p, size_t n)
+{
+    std::string line = what;
+    char hex[4];
+    const size_t shown = n <= 48 ? n : 40;
+    for (size_t i = 0; i < shown; ++i) { std::snprintf(hex, sizeof hex, " %02X", p[i]); line += hex; }
+    if (shown < n) {
+        line += " ...";
+        for (size_t i = n - 4; i < n; ++i) { std::snprintf(hex, sizeof hex, " %02X", p[i]); line += hex; }
+        line += " (" + std::to_string(n) + " bytes)";
+    }
+    logText(line);
+}
+
+// CoreMIDI wants each packet to hold complete messages. The ACIA hands over a raw byte
+// stream, so this reassembles it: running status is expanded, and a SysEx message is sent
+// once it is complete, in one packet, the way a hardware MIDI interface delivers it (only a
+// message longer than a packet can hold, a full sample dump, goes out in pieces). Every
+// message goes out in its own MIDIReceived call, so CoreMIDI never merges two of them.
 class OutAssembler {
 public:
     void byte(uint8_t b)
@@ -55,7 +105,11 @@ public:
             if (need_ == 0) { emit(&b, 1); status_ = 0; }
             return;
         }
-        if (inSysex_) { sysex_.push_back(b); return; }
+        if (inSysex_) {
+            sysex_.push_back(b);
+            if (sysex_.size() >= kMaxPacket) flushSysex();              // very long dump
+            return;
+        }
         if (!status_) return;                                           // no status yet
         data_[have_++] = b;
         if (have_ == need_) {
@@ -66,50 +120,34 @@ public:
         }
     }
 
-    // Ends the batch: sends what is complete, plus any SysEx received so far.
-    void finish()
-    {
-        if (inSysex_) flushSysex();
-        send();
-    }
-
 private:
+    static constexpr size_t kMaxPacket = 60000;  // MIDIPacket length is 16 bits
     uint8_t status_ = 0, data_[2] = {};
     int have_ = 0, need_ = 0;
     bool inSysex_ = false;
     std::vector<uint8_t> sysex_;
-    alignas(MIDIPacketList) uint8_t buf_[16384];
-    MIDIPacketList* list_ = reinterpret_cast<MIDIPacketList*>(buf_);
-    MIDIPacket* cur_ = nullptr;
+    std::vector<uint8_t> buf_ = std::vector<uint8_t>(kMaxPacket + 1024);
 
     void flushSysex()
     {
-        if (!sysex_.empty()) emit(sysex_.data(), int(sysex_.size()));
+        if (!sysex_.empty()) {
+            if (sysex_[0] == 0xF0) gOutSysex++;
+            emit(sysex_.data(), sysex_.size());
+        }
         sysex_.clear();
     }
 
-    void emit(const uint8_t* p, int n)
+    void emit(const uint8_t* p, size_t n)
     {
-        while (n > 0) {
-            const int chunk = n < 256 ? n : 256;
-            if (!cur_) cur_ = MIDIPacketListInit(list_);
-            MIDIPacket* next = MIDIPacketListAdd(list_, sizeof(buf_), cur_, 0, ByteCount(chunk), p);
-            if (!next) {            // list full: send it and start a new one
-                send();
-                cur_ = MIDIPacketListInit(list_);
-                next = MIDIPacketListAdd(list_, sizeof(buf_), cur_, 0, ByteCount(chunk), p);
-                if (!next) return;
-            }
-            cur_ = next;
-            p += chunk;
-            n -= chunk;
-        }
-    }
-
-    void send()
-    {
-        if (cur_ && list_->numPackets > 0 && gSource) MIDIReceived(gSource, list_);
-        cur_ = nullptr;
+        gOutBytes += n;
+        logBytes("out", p, n);
+        if (!gSource) return;
+        MIDIPacketList* list = reinterpret_cast<MIDIPacketList*>(buf_.data());
+        MIDIPacket* cur = MIDIPacketListInit(list);
+        cur = MIDIPacketListAdd(list, buf_.size(), cur, 0, ByteCount(n), p);
+        if (!cur) { logText("out: packet too large, dropped"); return; }
+        const OSStatus st = MIDIReceived(gSource, list);
+        if (st != noErr) logText("out: MIDIReceived error " + std::to_string(int(st)));
     }
 };
 
@@ -133,15 +171,19 @@ void restoreUniqueId(MIDIEndpointRef endpoint, NSString* key)
 void mirageStartVirtualMidi()
 {
     if (gClient) return;
-    if (MIDIClientCreate(CFSTR("Mirage Remake"), nullptr, nullptr, &gClient) != noErr) {
+    openLog();
+    OSStatus cs = MIDIClientCreate(CFSTR("Mirage Remake"), nullptr, nullptr, &gClient);
+    if (cs != noErr) {
         gClient = 0;
-        NSLog(@"Mirage: could not create the MIDI client; no virtual MIDI port");
+        logText("MIDIClientCreate failed: " + std::to_string(int(cs)));
         return;
     }
-    if (MIDISourceCreate(gClient, CFSTR("Mirage Remake"), &gSource) == noErr)
+    cs = MIDISourceCreate(gClient, CFSTR("Mirage Remake"), &gSource);
+    if (cs == noErr)
         restoreUniqueId(gSource, kSourceIdKey);
     else
         gSource = 0;
+    logText("source \"Mirage Remake\": " + std::string(cs == noErr ? "created" : "FAILED " + std::to_string(int(cs))));
 
     // The MIDIPacketList API is deprecated from macOS 11 but works on every version the app
     // supports (10.15 and later); the replacement needs macOS 11.
@@ -152,7 +194,11 @@ void mirageStartVirtualMidi()
             (void)srcRef;
             const MIDIPacket* p = &list->packet[0];
             for (UInt32 i = 0; i < list->numPackets; ++i) {
+                gInBytes += p->length;
+                for (UInt16 k = 0; k < p->length; ++k) if (p->data[k] == 0xF0) gInSysex++;
+                logBytes("in ", p->data, p->length);
                 mirage::MirageEngine* engine = dpf::g_mirageEngine.load();
+                if (!engine) logText("in : no engine yet, dropped");
                 if (engine) {
                     // The audio thread empties the ring every block; wait for room if a large
                     // dump arrives faster than that.
@@ -167,6 +213,7 @@ void mirageStartVirtualMidi()
         restoreUniqueId(gDestination, kDestinationIdKey);
     else
         gDestination = 0;
+    logText("destination \"Mirage Remake\": " + std::string(st == noErr ? "created" : "FAILED " + std::to_string(int(st))));
 
     // MIDI OUT: collect what the Mirage sent every millisecond (a byte takes 320 us at MIDI
     // speed) and pass it on.
@@ -177,7 +224,15 @@ void mirageStartVirtualMidi()
         mirage::MirageEngine* engine = dpf::g_mirageEngine.load();
         if (!engine) return;
         engine->drainMidiOut([](uint8_t b) { gOut.byte(b); });
-        gOut.finish();
     });
     dispatch_resume(gTimer);
+}
+
+// For the Settings window: bytes and SysEx messages through the port so far.
+void mirageVirtualMidiStats(uint64_t& inBytes, uint64_t& inSysex, uint64_t& outBytes, uint64_t& outSysex)
+{
+    inBytes = gInBytes.load();
+    inSysex = gInSysex.load();
+    outBytes = gOutBytes.load();
+    outSysex = gOutSysex.load();
 }
