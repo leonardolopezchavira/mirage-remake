@@ -120,7 +120,10 @@ page in place of the on-screen keyboard: the program (27–38), both envelopes w
 (40–59), and the selected wavesample (60–72) with its waveform. Drag a bar to change a
 value, or use the scroll wheel for single steps; click a switch to flip it; drag the white
 lines on the waveform to move the loop. **Lower/Upper**, **Program 1–4** and
-**Wavesample 1–8** select what you edit (and play), as the Mirage's own keys do. Values
+**Wavesample 1–8** select what you edit (and play), as the Mirage's own keys do. The
+**keymap** under the program shows which wavesample plays which keys in the selected
+program (starting from its initial wavesample, ▸): click a band to select that
+wavesample, drag a white line to move its top key. Values
 appear as the Mirage's display shows them, and edits on the front panel show up in the
 editor straight away. Click **Editor** again to bring the keyboard back.
 

@@ -59,6 +59,8 @@ public:
         envelope(g, 360, 64, 400, 70, 40, kYellow);
         envelope(g, 360, 260, 400, 70, 50, kYellow);
         waveform(g, 780, 64, 400, 150);
+        section(g, 20, 292, 320, "KEYMAP");
+        keymap(g);
 
         for (const auto& s : sliders_) slider(g, s, on);
 
@@ -97,6 +99,19 @@ public:
             dragTo(x);
             return true;
         }
+        // keymap: drag a band's right edge (top key) or click a band (select it)
+        if (y >= kMapY && y <= kKeysY + kKeysH) {
+            const auto bands = keymapBands();
+            for (const auto& b : bands)
+                if (std::fabs(x - edgeAfter(b.last)) <= 5 && b.last < 60) {
+                    if (b.ws != link_.half(h).wavesample) link_.selectWavesample(h, b.ws);
+                    dragEdge_ = b.ws;
+                    return true;
+                }
+            for (const auto& b : bands)
+                if (x >= edgeAfter(b.first - 1) && x < edgeAfter(b.last)) { link_.selectWavesample(h, b.ws); return true; }
+            return true;
+        }
         // loop markers on the waveform
         if (x >= kWave.x && x <= kWave.x + kWave.w && y >= kWave.y && y <= kWave.y + kWave.h) {
             const float ls = pageX(link_.value(h, 62)), le = pageX(link_.value(h, 63) + 1);
@@ -111,11 +126,24 @@ public:
     {
         if (dragSlider_ >= 0) { dragTo(x); return true; }
         if (dragMarker_) { dragMarkerTo(x); return true; }
+        if (dragEdge_ >= 0) { dragEdgeTo(x); return true; }
         return false;
     }
 
-    void mouseUp() { dragSlider_ = -1; dragMarker_ = 0; }
-    bool dragging() const { return dragSlider_ >= 0 || dragMarker_ != 0; }
+    void mouseUp() { dragSlider_ = -1; dragMarker_ = 0; dragEdge_ = -1; }
+    bool dragging() const { return dragSlider_ >= 0 || dragMarker_ != 0 || dragEdge_ >= 0; }
+
+    // Pointer moved with no button down: the keymap shows the band under it. True to repaint.
+    bool hover(float x, float y)
+    {
+        int ws = -1;
+        if (link_.connected() && y >= kMapY && y <= kKeysY + kKeysH)
+            for (const auto& b : keymapBands())
+                if (x >= edgeAfter(b.first - 1) && x < edgeAfter(b.last)) ws = b.ws;
+        if (ws == hoverWs_) return false;
+        hoverWs_ = ws;
+        return true;
+    }
 
     bool scroll(float x, float y, float dy)
     {
@@ -144,7 +172,7 @@ private:
     mirage::MirageEngine& engine_;
     std::vector<Tab> tabs_;
     std::vector<Slider> sliders_;
-    int dragSlider_ = -1, dragMarker_ = 0;
+    int dragSlider_ = -1, dragMarker_ = 0, dragEdge_ = -1, hoverWs_ = -1;
     const Rect kRefresh{1088, 12, 92, 20};
     const Rect kWave{780, 64, 400, 150};
 
@@ -297,6 +325,133 @@ private:
         g.strokeColor(c); g.strokeWidth(2); g.stroke();
         g.lineTo(bx, by); g.closePath();
         g.fillColor(Color(c.red, c.green, c.blue, 0.18f)); g.fill();
+    }
+
+    // ------------------------------------------------------------------ keymap
+    // The 61 keys (top key 0 = the bottom C) and the wavesamples the selected program plays:
+    // from its initial wavesample (27) upwards, each one taking the keys above the previous
+    // one's top key up to its own (72), until one whose top key doesn't rise any more.
+    static constexpr float kMapX = 20, kMapW = 320, kMapY = 304, kBandH = 18, kKeysY = 324, kKeysH = 58;
+    struct Band { int ws, first, last; };
+
+    std::vector<Band> keymapBands() const
+    {
+        std::vector<Band> bands;
+        const int h = link_.currentHalf();
+        const auto& half = link_.half(h);
+        const mirage::MasosParam& top = *mirage::masosParam(72);
+        int ws = half.programRaw(half.program, *mirage::masosParam(27)) & 7, first = 0, prevTop = -1;
+        for (; ws < 8; ++ws) {
+            const int t = std::min(60, half.wavesampleRaw(ws, top));
+            if (t <= prevTop) break;
+            bands.push_back({ws, first, t});
+            first = t + 1;
+            prevTop = t;
+            if (t >= 60) break;
+        }
+        return bands;
+    }
+
+    static bool isBlack(int k) { const int n = k % 12; return n == 1 || n == 3 || n == 6 || n == 8 || n == 10; }
+    static int whitesBefore(int k)
+    {
+        int c = 0;
+        for (int i = 0; i < k; ++i) c += isBlack(i) ? 0 : 1;
+        return c;
+    }
+    static float whiteW() { return kMapW / 36.0f; }   // C to C, 5 octaves: 36 white keys
+    static float keyCentre(int k)
+    {
+        if (k < 0) return kMapX;
+        if (k > 60) return kMapX + kMapW;
+        return isBlack(k) ? kMapX + whitesBefore(k) * whiteW() : kMapX + (whitesBefore(k) + 0.5f) * whiteW();
+    }
+    // the boundary between key k and key k + 1
+    static float edgeAfter(int k)
+    {
+        if (k < 0) return kMapX;
+        if (k >= 60) return kMapX + kMapW;
+        return (keyCentre(k) + keyCentre(k + 1)) / 2;
+    }
+
+    void dragEdgeTo(float x)
+    {
+        const int h = link_.currentHalf();
+        const auto bands = keymapBands();
+        for (size_t i = 0; i < bands.size(); ++i) {
+            if (bands[i].ws != dragEdge_) continue;
+            // the nearest key boundary, keeping at least one key for this band and the next
+            int k = 0;
+            float best = 1e9f;
+            for (int t = 0; t <= 60; ++t)
+                if (std::fabs(edgeAfter(t) - x) < best) { best = std::fabs(edgeAfter(t) - x); k = t; }
+            const int lo = bands[i].first, hi = i + 1 < bands.size() ? bands[i + 1].last - 1 : 60;
+            k = std::clamp(k, lo, std::max(lo, hi));
+            if (k != link_.value(h, 72)) link_.setParam(h, 72, k);
+            return;
+        }
+    }
+
+    static std::string noteName(int k)
+    {
+        static const char* names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        return std::string(names[k % 12]) + std::to_string(k / 12 + 2);
+    }
+
+    void keymap(NanoVG& g)
+    {
+        // keys
+        const float ww = whiteW();
+        for (int k = 0, wi = 0; k <= 60; ++k) {
+            if (isBlack(k)) continue;
+            g.beginPath(); g.rect(kMapX + wi * ww + 0.5f, kKeysY, ww - 1, kKeysH);
+            g.fillColor(Color(226, 224, 216)); g.fill();
+            ++wi;
+        }
+        for (int k = 0; k <= 60; ++k) {
+            if (!isBlack(k)) continue;
+            g.beginPath(); g.rect(keyCentre(k) - ww * 0.32f, kKeysY, ww * 0.64f, kKeysH * 0.6f);
+            g.fillColor(Color(24, 24, 26)); g.fill();
+        }
+        g.beginPath(); g.rect(kMapX, kMapY, kMapW, kBandH); g.fillColor(Color(12, 13, 15)); g.fill();
+        if (!link_.connected()) return;
+
+        const int h = link_.currentHalf();
+        const int sel = link_.half(h).wavesample;
+        const auto bands = keymapBands();
+        for (size_t i = 0; i < bands.size(); ++i) {
+            const auto& b = bands[i];
+            const float x0 = edgeAfter(b.first - 1), x1 = edgeAfter(b.last);
+            const bool on = b.ws == sel, hov = b.ws == hoverWs_;
+            g.beginPath(); g.rect(x0 + 0.5f, kMapY, x1 - x0 - 1, kBandH);
+            g.fillColor(on ? kYellow : hov ? Color(170, 128, 44) : Color(120, 90, 32)); g.fill();
+            // the same range shaded over the keys
+            g.beginPath(); g.rect(x0, kKeysY, x1 - x0, kKeysH);
+            g.fillColor(on ? Color(240, 180, 60, 0.30f) : Color(240, 180, 60, 0.0f)); g.fill();
+            char t[16];
+            std::snprintf(t, sizeof t, i == 0 ? "%d\xE2\x96\xB8" : "%d", b.ws + 1);   // ▸ marks the initial wavesample
+            if (x1 - x0 > 14)
+                label(g, (x0 + x1) / 2, kMapY + kBandH / 2 + 1, t, 10, on ? Color(20, 20, 20) : Color(235, 235, 235), NanoVG::ALIGN_CENTER);
+            // draggable top-key edge
+            if (b.last < 60) {
+                g.beginPath(); g.rect(x1 - 1, kMapY - 2, 2, kBandH + kKeysH + 8);
+                g.fillColor(Color(245, 245, 245, on ? 0.9f : 0.45f)); g.fill();
+            }
+        }
+        // what the pointer (or else the selection) is on
+        const int show = hoverWs_ >= 0 ? hoverWs_ : sel;
+        std::string info;
+        for (const auto& b : bands)
+            if (b.ws == show) {
+                info = "Wavesample " + std::to_string(b.ws + 1) + ": " + noteName(b.first) + " to " + noteName(b.last) +
+                       "  (keys " + std::to_string(b.first + 1) + "\xE2\x80\x93" + std::to_string(b.last + 1) + ")";
+                if (b.ws == bands.front().ws) info += ", initial";
+            }
+        if (info.empty())
+            info = "Wavesample " + std::to_string(sel + 1) + " is not played by program " + std::to_string(link_.half(h).program + 1);
+        label(g, kMapX, kKeysY + kKeysH + 14, info.c_str(), 10, Color(212, 214, 220), NanoVG::ALIGN_LEFT);
+        label(g, kMapX, kKeysY + kKeysH + 30, "click a band to select it, drag a white line to move its top key", 9, kDim,
+              NanoVG::ALIGN_LEFT);
     }
 
     void waveform(NanoVG& g, float x, float y, float w, float hgt)

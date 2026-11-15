@@ -228,6 +228,7 @@ protected:
         const float x = float(ev.pos.getX()) / s, y = float(ev.pos.getY()) / s;
         if (draggingVol_) { setVolumeFromY(y); return true; }
         if (editor_->dragging()) { editor_->mouseMove(x, y - kRackH); repaint(); return true; }
+        if (editorOpen_ && editor_->hover(x, y - kRackH)) repaint();
         if (playing_ >= 0) {
             const int n = noteAt(x, y);
             if (n != playing_) { noteOff(); if (n >= 0) noteOn(n); }
