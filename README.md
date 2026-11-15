@@ -66,7 +66,10 @@ Behind the scenes that is roughly 6 seconds of machine time, run faster than rea
 - **POWER** (an addition): click the power switch to turn the Mirage off and on. It then
   boots from the disk in the drive, the hardware's way of loading another operating system:
   inserting a disk never replaces the OS that is running. Use it after inserting MASOS, the
-  formatter disk or any other OS disk.
+  formatter disk or any other OS disk. The app and plug-ins remember that disk and boot from
+  it the next time they start, like a Mirage switched off with the disk still in. To go back
+  to the built-in OS 3.2, pick `os32` with ◀ ▶ and click POWER again. (If the remembered
+  disk has been moved or deleted, the built-in OS 3.2 starts instead.)
 - **New disks:** **New** (next to Open…) creates a blank formatted disk with OS 3.2,
   `My Disk 1.img`, `My Disk 2.img`… in `~/Library/Application Support/Mirage/Disks`, and
   inserts it. Save into it with the Mirage's own commands: **PARAM 1 1** (lower sound) or

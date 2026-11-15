@@ -35,6 +35,10 @@ public:
     // Remembered editor choices (~/Library/Application Support/Mirage/settings.txt): used as
     // parameter defaults, so the standalone app comes back the way it was left.
     void savePreference(const std::string& key, float value);
+    void savePreferenceText(const std::string& key, const std::string& value);
+    std::string preferenceText(const std::string& key, const std::string& fallback) const;
+    // The disk now in the drive becomes the one the Mirage boots from next time.
+    void rememberBootDisk();
     float preference(const std::string& key, float fallback) const;
     ~MiragePlugin() override;
 
@@ -60,6 +64,7 @@ private:
     std::unique_ptr<mirage::MirageEngine> engine_;
     std::vector<DiskEntry> disks_;
     mirage::MasosLink masos_;
+    std::string lastDiskPath_;   // the disk most recently put in the drive
     std::vector<float> mono_, monoIn_;
     std::string templatePath_;
     void scanDisks();

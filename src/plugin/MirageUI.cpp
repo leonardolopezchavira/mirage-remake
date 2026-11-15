@@ -321,6 +321,7 @@ private:
 
     void powerCycle()
     {
+        plugin_->rememberBootDisk();  // the next start boots from this disk too
         plugin_->engine().restart();
         plugin_->masos().reset();     // MASOS sends its dumps again when it has booted
         powerOffTicks_ = 12;

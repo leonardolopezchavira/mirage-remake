@@ -77,7 +77,21 @@ MiragePlugin::MiragePlugin() : Plugin(kParamCount, 0, 1)
 {
     std::vector<uint8_t> rom(embedded::kRom, embedded::kRom + embedded::kRomSize);
     std::vector<uint8_t> boot(embedded::kBootDisk, embedded::kBootDisk + embedded::kBootDiskSize);
-    engine_ = std::make_unique<mirage::MirageEngine>(rom, boot, embedded::kBootDiskName);
+    std::string bootName = embedded::kBootDiskName, bootPath;
+    // Boot from the disk that was in the drive the last time POWER was used (e.g. MASOS_BE),
+    // as a Mirage switched off with that disk in would; the built-in OS 3.2 disk otherwise.
+    const std::string saved = preferenceText("boot_disk", "");
+    if (!saved.empty()) {
+        std::vector<uint8_t> file, img;
+        std::string err;
+        if (readFile(saved, file) && mirage::decodeDiskImage(file, img, err)) {
+            boot = std::move(img);
+            bootName = baseName(saved);
+            bootPath = saved;
+        }
+    }
+    engine_ = std::make_unique<mirage::MirageEngine>(rom, boot, bootName);
+    if (!bootPath.empty()) engine_->setDiskPath(bootPath);
     engine_->setSampleRate(getSampleRate());
     scanDisks();
     g_mirageEngine.store(engine_.get());
@@ -174,13 +188,14 @@ bool MiragePlugin::loadDiskFile(const std::string& path, std::string* error)
     if (!readFile(path, file)) err = "Could not read " + baseName(path);
     else if (mirage::decodeDiskImage(file, img, err)) {
         engine_->insertDisk(std::move(img), baseName(path), path);
+        lastDiskPath_ = path;
         return true;
     }
     if (error) *error = err;
     return false;
 }
 
-void MiragePlugin::savePreference(const std::string& key, float value)
+void MiragePlugin::savePreferenceText(const std::string& key, const std::string& value)
 {
     const std::string path = dirName(userDiskDir()) + "/settings.txt";
     std::map<std::string, std::string> kv;
@@ -191,19 +206,36 @@ void MiragePlugin::savePreference(const std::string& key, float value)
             if (eq != std::string::npos) kv[line.substr(0, eq)] = line.substr(eq + 1);
         }
     }
-    kv[key] = std::to_string(value);
+    kv[key] = value;
     std::ofstream f(path, std::ios::trunc);
     for (const auto& [k, v] : kv) f << k << '=' << v << '\n';
 }
 
-float MiragePlugin::preference(const std::string& key, float fallback) const
+std::string MiragePlugin::preferenceText(const std::string& key, const std::string& fallback) const
 {
     std::ifstream f(dirName(userDiskDir()) + "/settings.txt");
     for (std::string line; std::getline(f, line);) {
         const size_t eq = line.find('=');
-        if (eq != std::string::npos && line.substr(0, eq) == key) return std::strtof(line.c_str() + eq + 1, nullptr);
+        if (eq != std::string::npos && line.substr(0, eq) == key) return line.substr(eq + 1);
     }
     return fallback;
+}
+
+void MiragePlugin::savePreference(const std::string& key, float value)
+{
+    savePreferenceText(key, std::to_string(value));
+}
+
+float MiragePlugin::preference(const std::string& key, float fallback) const
+{
+    const std::string v = preferenceText(key, "");
+    return v.empty() ? fallback : std::strtof(v.c_str(), nullptr);
+}
+
+void MiragePlugin::rememberBootDisk()
+{
+    // the built-in OS 3.2 disk has no path: an empty entry means "boot the built-in disk"
+    savePreferenceText("boot_disk", lastDiskPath_.empty() ? engine_->diskPath() : lastDiskPath_);
 }
 
 int MiragePlugin::newDisk(std::string* error)
