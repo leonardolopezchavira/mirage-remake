@@ -1,13 +1,14 @@
 // The built-in editor (an addition): every program and wavesample parameter of the selected
 // half on one page, envelope graphs and the wavesample with its loop. It talks to the
 // emulated Mirage the way an external editor would, through the MASOS_BE SysEx protocol
-// (src/engine/MasosLink.*), so it needs MASOS_BE booted; it reads the sample memory directly
+// (src/engine/MasosLink.*) or OS 3.2's memory (src/engine/Os32Link.*); it reads the sample memory directly
 // to draw the waveform. Drawn below the panel, in place of the on-screen keyboard, in its own coordinates (kEdW x kEdH).
 // MIT licence.
 #pragma once
 
 #include "NanoVG.hpp"
 #include "../engine/MasosLink.h"
+#include "../engine/EditorLink.h"
 #include "../engine/MirageEngine.h"
 
 #include <algorithm>
@@ -24,7 +25,7 @@ class EditorView {
 public:
     static constexpr float kEdW = 1200, kEdH = 440;
 
-    EditorView(mirage::MasosLink& link, mirage::MirageEngine& engine) : link_(link), engine_(engine) { layout(); }
+    EditorView(mirage::EditorLink& link, mirage::MirageEngine& engine) : link_(link), engine_(engine) { layout(); }
 
     // ------------------------------------------------------------------ drawing
     void draw(NanoVG& g)
@@ -51,7 +52,9 @@ public:
         pill(g, kKeymapBtn.x, kKeymapBtn.y, kKeymapBtn.w, kKeymapBtn.h, "Key map", keymapPage_, true);
         pill(g, kImportBtn.x, kImportBtn.y, kImportBtn.w, kImportBtn.h, importing_ ? "Importing\xE2\x80\xA6" : "Import\xE2\x80\xA6",
              importing_, true);
-        label(g, 890, 24, on ? "Connected to MASOS" : "Not connected", 10,
+        char status[48];
+        std::snprintf(status, sizeof status, "Connected to %s", link_.osName());
+        label(g, 890, 24, on ? status : "Not connected", 10,
               on ? Color(120, 220, 120) : Color(230, 140, 90), NanoVG::ALIGN_RIGHT);
 
         if (keymapPage_) {
@@ -62,13 +65,11 @@ public:
 
         if (!on) {
             g.beginPath(); g.rect(0, 40, kEdW, kEdH - 40); g.fillColor(Color(0, 0, 0, 0.6f)); g.fill();
-            label(g, kEdW / 2, 200, "Editing needs the MASOS_BE operating system.", 15, Color(240, 240, 240), NanoVG::ALIGN_CENTER);
-            label(g, kEdW / 2, 228, "Open\xE2\x80\xA6 MASOS_BE-v1.0.0.hfe (from BoxedEar), then click POWER so the Mirage boots from it.", 11,
+            label(g, kEdW / 2, 200, "No editable operating system is running.", 15, Color(240, 240, 240), NanoVG::ALIGN_CENTER);
+            label(g, kEdW / 2, 228, "The editor works with OS 3.2 (the built-in disk, os32) and with MASOS_BE. Boot one of them with POWER.", 11,
                   Color(200, 200, 200), NanoVG::ALIGN_CENTER);
             label(g, kEdW / 2, 250, "The editor connects by itself once it is running.", 11, Color(200, 200, 200), NanoVG::ALIGN_CENTER);
-            label(g, kEdW / 2, 290, "Import\xE2\x80\xA6 works under OS 3.2: it samples a WAV or AIFF file through the Mirage's own input", 11,
-                  kYellow, NanoVG::ALIGN_CENTER);
-            label(g, kEdW / 2, 310, "into the half chosen with Lower / Upper.", 11, kYellow, NanoVG::ALIGN_CENTER);
+
         }
     }
 
@@ -185,7 +186,7 @@ private:
     struct Tab { float x, y, w, h; TabKind kind; int index; std::string text; };
     struct Slider { int param; float x, y, w, labelW; const char* name; };
 
-    mirage::MasosLink& link_;
+    mirage::EditorLink& link_;
     mirage::MirageEngine& engine_;
     std::vector<Tab> tabs_;
     std::vector<Slider> sliders_;

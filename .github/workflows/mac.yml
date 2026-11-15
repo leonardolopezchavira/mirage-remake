@@ -32,6 +32,8 @@ jobs:
         run: ./build/mirage_engine_check
       - name: Audio file import check (WAV/AIFF through the sampling input, OS 3.2)
         run: ./build/mirage_import_check
+      - name: Editor on OS 3.2 check (memory, key presses, selection)
+        run: ./build/mirage_os32_check
       - name: Editor protocol check (MASOS dumps, bundled MASOS v2)
         run: ./build/mirage_masos_check resources/disks/OS/masos.img
       - name: The standalone app was built for both architectures

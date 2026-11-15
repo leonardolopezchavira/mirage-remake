@@ -5,6 +5,7 @@
 // spec asks (at least 8 ms between SysEx messages, fast movements combined).
 // Plain C++, one thread (the editor's). MIT licence.
 #pragma once
+#include "EditorLink.h"
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -30,19 +31,12 @@ const MasosParam* masosParam(int number);
 // The value as the Mirage's display shows it ("45", "7F", "on", ...).
 std::string masosDisplay(const MasosParam& p, int raw);
 
-class MasosLink {
+class MasosLink : public EditorLink {
 public:
-    static constexpr int kDumpBytes = 625;
-    static constexpr int kWcbOffset = 1, kWcbSize = 24, kPpbOffset = 481, kPpbSize = 36;
-
-    struct Half {
-        bool valid = false;
-        uint8_t dump[kDumpBytes] = {};
-        int program = 0;          // selected program 0..3
-        int wavesample = 0;       // selected wavesample 0..7
-        int programRaw(int prog, const MasosParam& p) const { return dump[kPpbOffset + prog * kPpbSize + p.offset]; }
-        int wavesampleRaw(int ws, const MasosParam& p) const { return dump[kWcbOffset + ws * kWcbSize + p.offset]; }
-    };
+    static constexpr int kDumpBytes = SoundHalf::kDumpBytes;
+    static constexpr int kWcbOffset = SoundHalf::kWcbOffset, kWcbSize = SoundHalf::kWcbSize,
+                         kPpbOffset = SoundHalf::kPpbOffset, kPpbSize = SoundHalf::kPpbSize;
+    using Half = SoundHalf;
 
     // Bytes the Mirage sent on MIDI OUT.
     void receive(uint8_t b);
@@ -53,23 +47,24 @@ public:
     // Forgets everything (the Mirage restarted): not connected until it answers again.
     void reset() { queue_.clear(); connected_ = false; halves_[0] = Half(); halves_[1] = Half(); curHalf_ = 0; ++revision_; }
     // Asks for the configuration and both halves (also done on the first pump()).
-    void requestAll();
+    void requestAll() override;
     void requestHalf(int half);
 
     // Edits (also applied to the local copy at once). Program parameters go to the selected
     // program of that half; select() it first.
-    void setParam(int half, int number, int raw);
+    void setParam(int half, int number, int raw) override;
     // Selection, through front-panel key presses.
-    void selectWavesample(int half, int ws);
-    void selectProgram(int half, int prog);
+    void selectWavesample(int half, int ws) override;
+    void selectProgram(int half, int prog) override;
 
-    bool connected() const { return connected_; }
-    int currentHalf() const { return curHalf_; }
-    const Half& half(int h) const { return halves_[h & 1]; }
+    bool connected() const override { return connected_; }
+    const char* osName() const override { return "MASOS"; }
+    int currentHalf() const override { return curHalf_; }
+    const Half& half(int h) const override { return halves_[h & 1]; }
     // Current value of a parameter for the selected program / wavesample of that half.
-    int value(int half, int number) const;
+    int value(int half, int number) const override;
     // Counts every change of the model, so a view knows when to redraw.
-    uint64_t revision() const { return revision_; }
+    uint64_t revision() const override { return revision_; }
 
 private:
     struct Out {

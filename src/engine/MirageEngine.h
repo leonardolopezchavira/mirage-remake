@@ -54,6 +54,9 @@ public:
     // Editor thread (thread-safe).
     void setPanelKey(int key, bool down);
     void postMidi(const uint8_t* p, int n) { uiMidi_.push(p, n); }
+    // Writes one byte of main RAM ($8000-$DFFF) at the start of the next audio block (editor
+    // thread; the audio thread owns the machine).
+    bool postPoke(uint16_t addr, uint8_t value) { const uint8_t m[3] = {uint8_t(addr >> 8), uint8_t(addr), value}; return pokes_.push(m, 3); }
     // MIDI from an external port (one other thread, e.g. the standalone's virtual MIDI port).
     bool postExternalMidi(const uint8_t* p, int n) { return extMidi_.push(p, n); }
     // MIDI OUT of the emulated Mirage: bytes in the order the OS sent them, for one reader thread.
@@ -107,7 +110,9 @@ private:
     std::vector<float> scratch_, inScratch_;
     float lastIn_ = 0.0f;
 
-    ByteRing uiMidi_, extMidi_, midiOut_, editorOut_;
+    ByteRing uiMidi_, extMidi_, midiOut_, editorOut_, pokes_;
+    uint8_t pokeBuf_[3] = {};
+    int pokeHave_ = 0;
     std::atomic<bool> restartPending_{false};
     std::mutex fileLock_;
     std::vector<float> filePending_, fileBuf_, fileScratch_;

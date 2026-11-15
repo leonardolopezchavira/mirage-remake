@@ -65,7 +65,7 @@ public:
         // mouse coordinates and getWidth()).
         setGeometryConstraints(uint(kW * 0.6f), uint(kH * 0.6f), true, false);
         plugin_ = static_cast<MiragePlugin*>(getPluginInstancePointer());
-        editor_.reset(new EditorView(plugin_->masos(), plugin_->engine()));
+        editor_.reset(new EditorView(plugin_->editorLink(), plugin_->engine()));
         wantEditor_ = plugin_->preference("editor_open", 0.0f) > 0.5f;
         // Standalone app only (null in every plug-in format): menus, settings, MIDI inputs.
         if (g_mirageStandaloneStart) g_mirageStandaloneStart();
@@ -330,10 +330,17 @@ private:
         // after the drive stops (a sound or a new OS loaded), read both halves again
         if (wasMotor_ && !motor) link.requestAll();
         wasMotor_ = motor;
-        // until MASOS answers, ask again every few seconds (OS 3.2 ignores the request)
-        if (editorOpen_ && !link.connected() && now >= nextRetryMs_) { link.requestAll(); nextRetryMs_ = now + 3000; }
+        // OS 3.2 is read from memory; otherwise ask MASOS every few seconds until it answers
+        auto& os32 = plugin_->os32();
+        os32.setPaused(import_.state() == mirage::SampleImport::State::Running);
+        os32.update(now);
+        if (editorOpen_ && !os32.connected() && !link.connected() && now >= nextRetryMs_) {
+            link.requestAll();
+            nextRetryMs_ = now + 3000;
+        }
         link.pump(now, [&](const uint8_t* p, int n) { e.postMidi(p, n); });
-        if (link.revision() != editorRev_) { editorRev_ = link.revision(); if (editorOpen_) repaint(); }
+        const uint64_t rev = plugin_->editorLink().revision();
+        if (rev != editorRev_) { editorRev_ = rev; if (editorOpen_) repaint(); }
     }
 
     // ------------------------------------------------------------------ audio file import
@@ -367,8 +374,8 @@ private:
         }
         const size_t slash = path.find_last_of('/');
         if (slash != std::string::npos) plugin_->savePreferenceText("import_dir", path.substr(0, slash));
-        auto& link = plugin_->masos();
-        if (link.connected()) {
+        auto& link = plugin_->editorLink();
+        if (plugin_->masos().connected() && !plugin_->os32().connected()) {
             // MASOS's own sampling doesn't work in the emulator yet: it records nothing.
             showStatus("Import needs OS 3.2 for now: pick os32, click POWER, then import");
             return;
@@ -393,7 +400,7 @@ private:
                            " half. Save: PARAM 1 " + (importHalf_ ? "2" : "1") + ", slot, ENTER");
             else
                 showStatus(importName_ + " sampled. The OS is asking a question: answer it or press CANCEL");
-            plugin_->masos().requestAll();
+            plugin_->editorLink().requestAll();
         } else {
             showStatus(import_.message());
         }

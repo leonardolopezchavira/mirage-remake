@@ -127,6 +127,13 @@ void MirageEngine::process(float* out, int frames, const float* in)
     // Editor input
     uiMidi_.drain([this](uint8_t b) { m_.midiIn(b); });
     extMidi_.drain([this](uint8_t b) { m_.midiIn(b); });
+    pokes_.drain([this](uint8_t b) {
+        pokeBuf_[pokeHave_++] = b;
+        if (pokeHave_ < 3) return;
+        pokeHave_ = 0;
+        const int a = pokeBuf_[0] << 8 | pokeBuf_[1];
+        if (a >= 0x8000 && a < 0xE000) m_.mainRam()[a - 0x8000] = pokeBuf_[2];
+    });
     const uint32_t k = keys_.load(), changed = k ^ appliedKeys_.load();
     if (changed) {
         for (int bit = 0; bit < 24; ++bit)

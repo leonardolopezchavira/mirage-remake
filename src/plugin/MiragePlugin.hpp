@@ -4,6 +4,7 @@
 #include "DistrhoPlugin.hpp"
 #include "../engine/MirageEngine.h"
 #include "../engine/MasosLink.h"
+#include "../engine/Os32Link.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -23,6 +24,9 @@ public:
     const std::vector<DiskEntry>& disks() const { return disks_; }
     // The built-in editor's link to the Mirage (used by the editor thread only).
     mirage::MasosLink& masos() { return masos_; }
+    mirage::Os32Link& os32() { return *os32_; }
+    // What the editor uses: OS 3.2 directly when it runs, else MASOS.
+    mirage::EditorLink& editorLink() { return *linkSwitch_; }
     bool loadDiskFile(const std::string& path, std::string* error = nullptr);
     // Copies the blank formatted disk (OS 3.2, made with Ensoniq's fmt2 formatter) to the
     // user's disk folder as "My Disk N.img", inserts it and adds it to disks().
@@ -64,6 +68,8 @@ private:
     std::unique_ptr<mirage::MirageEngine> engine_;
     std::vector<DiskEntry> disks_;
     mirage::MasosLink masos_;
+    std::unique_ptr<mirage::Os32Link> os32_;
+    std::unique_ptr<mirage::LinkSwitch> linkSwitch_;
     std::string lastDiskPath_;   // the disk most recently put in the drive
     std::vector<float> mono_, monoIn_;
     std::string templatePath_;

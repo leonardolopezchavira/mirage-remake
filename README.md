@@ -133,11 +133,21 @@ select it, then click or drag in it (or use ‹ ›) to set its top key. Values
 appear as the Mirage's display shows them, and edits on the front panel show up in the
 editor straight away. Click **Editor** again to bring the keyboard back.
 
-The editor talks to the Mirage through BoxedEar's MASOS_BE protocol, so it works when
-MASOS_BE is running: **Open…** `MASOS_BE-v1.0.0.hfe`, click **POWER**, and it connects by
-itself. Load your sounds afterwards; the editor reads them in when the drive stops. Edits
-change the sound in memory, as on the hardware: save with **PARAM 1 1** / **1 2**, a slot
-and **ENTER** to keep them. It works in the plug-ins too.
+The editor works with **OS 3.2** (the built-in disk, `os32`, and every factory disk) and
+with **MASOS_BE**; it connects by itself to whichever is running.
+
+- **OS 3.2:** OS 3.2 keeps each half's sound in memory in the same layout as MASOS's SysEx
+  dump, so the editor reads every value directly. Edits are written into memory; the few
+  that OS 3.2 has to recalculate (27 initial wavesample, 60–65 sample and loop, 72 top
+  key), and the selection of half, program and wavesample, are made with front-panel key
+  presses, so the OS applies its own checks, as when you press the keys yourself. Those
+  take about a second each and the display shows the parameter while they happen.
+- **MASOS_BE:** through BoxedEar's MIDI protocol: **Open…** `MASOS_BE-v1.0.0.hfe`, click
+  **POWER**. (MASOS v2 shows the values but ignores edits.)
+
+Load your sounds as usual; the editor follows. Edits change the sound in memory, as on the
+hardware: save with **PARAM 1 1** / **1 2**, a slot and **ENTER** to keep them. It works in
+the plug-ins too.
 
 ### Importing an audio file
 
@@ -152,9 +162,9 @@ normal sample (about 2 seconds at the default rate); the file is played at a fix
 (peak −7 dB). Then play, loop and save it as usual (**PARAM 1 1** or **1 2**, a slot,
 **ENTER**).
 
-This needs **OS 3.2** (or another Ensoniq OS) to be running: under MASOS the emulated Mirage
-doesn't sample yet (MASOS shows a message and records nothing), so the import is refused.
-Import under OS 3.2, save the sound to a disk, and load it under MASOS_BE to edit it.
+This needs **OS 3.2** to be running (the editor works there too): under MASOS the emulated
+Mirage doesn't sample yet (MASOS shows a message and records nothing), so the import is
+refused.
 
 ### Editors (BoxedEar Visage) and MIDI out
 

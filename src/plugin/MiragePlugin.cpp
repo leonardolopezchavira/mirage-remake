@@ -93,6 +93,10 @@ MiragePlugin::MiragePlugin() : Plugin(kParamCount, 0, 1)
     engine_ = std::make_unique<mirage::MirageEngine>(rom, boot, bootName);
     if (!bootPath.empty()) engine_->setDiskPath(bootPath);
     engine_->setSampleRate(getSampleRate());
+    // OS 3.2 is recognised by its code at $8800 (track 0, sector 2 of the built-in OS disk).
+    std::vector<uint8_t> fingerprint(embedded::kBootDisk + 2 * 1024, embedded::kBootDisk + 3 * 1024);
+    os32_ = std::make_unique<mirage::Os32Link>(*engine_, std::move(fingerprint), 0x8800);
+    linkSwitch_ = std::make_unique<mirage::LinkSwitch>(masos_, *os32_);
     scanDisks();
     g_mirageEngine.store(engine_.get());
     // Development: MIRAGE_BOOT_DISK=<image> boots from that disk instead (e.g. MASOS_BE).

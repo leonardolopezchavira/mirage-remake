@@ -60,6 +60,9 @@ const std::vector<MasosParam> kParams = {
 
 const std::vector<MasosParam>& masosParams() { return kParams; }
 
+int SoundHalf::programRaw(int prog, const MasosParam& p) const { return dump[kPpbOffset + (prog & 3) * kPpbSize + p.offset]; }
+int SoundHalf::wavesampleRaw(int ws, const MasosParam& p) const { return dump[kWcbOffset + (ws & 7) * kWcbSize + p.offset]; }
+
 const MasosParam* masosParam(int number)
 {
     for (const auto& p : kParams)
