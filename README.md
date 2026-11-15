@@ -133,7 +133,8 @@ select it, then click or drag in it (or use ‹ ›) to set its top key. Values
 appear as the Mirage's display shows them, and edits on the front panel show up in the
 editor straight away. Click **Editor** again to bring the keyboard back.
 
-The editor works with **OS 3.2** (the built-in disk, `os32`, and every factory disk) and
+The editor works with **OS 3.2** (the built-in disk `os32`, and factory disks A1–C9; C10
+carries a different OS the editor doesn't recognise yet) and
 with **MASOS_BE**; it connects by itself to whichever is running.
 
 - **OS 3.2:** OS 3.2 keeps each half's sound in memory in the same layout as MASOS's SysEx
