@@ -12,7 +12,7 @@
 
 namespace mirage {
 
-// Single-producer single-consumer byte ring (editor -> audio thread).
+// Single-producer single-consumer byte ring (one writer thread, one reader thread).
 class ByteRing {
 public:
     bool push(const uint8_t* p, int n)
@@ -31,7 +31,7 @@ public:
         r_.store(r, std::memory_order_release);
     }
 private:
-    static constexpr uint32_t kSize = 4096;
+    static constexpr uint32_t kSize = 1u << 16;   // a full program dump is 1255 bytes
     uint8_t buf_[kSize];
     std::atomic<uint32_t> w_{0}, r_{0};
 };
@@ -54,6 +54,10 @@ public:
     // Editor thread (thread-safe).
     void setPanelKey(int key, bool down);
     void postMidi(const uint8_t* p, int n) { uiMidi_.push(p, n); }
+    // MIDI from an external port (one other thread, e.g. the standalone's virtual MIDI port).
+    bool postExternalMidi(const uint8_t* p, int n) { return extMidi_.push(p, n); }
+    // MIDI OUT of the emulated Mirage: bytes in the order the OS sent them, for one reader thread.
+    template <class F> void drainMidiOut(F&& f) { midiOut_.drain(f); }
     void insertDisk(std::vector<uint8_t> image, const std::string& name, const std::string& path);
     uint8_t display(int digit) const { return digit ? disp1_.load() : disp0_.load(); }
     bool diskActive() const { return motor_.load(); }
@@ -90,7 +94,7 @@ private:
     std::vector<float> scratch_, inScratch_;
     float lastIn_ = 0.0f;
 
-    ByteRing uiMidi_;
+    ByteRing uiMidi_, extMidi_, midiOut_;
     std::atomic<uint32_t> keys_{0}, appliedKeys_{0};
 
     std::mutex diskLock_;   // pending disk + written disk

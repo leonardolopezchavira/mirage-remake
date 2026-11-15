@@ -5,8 +5,16 @@
 
 #include "DistrhoUtils.hpp"
 
+#include <atomic>
+
+namespace mirage { class MirageEngine; }
+
 START_NAMESPACE_DISTRHO
 
 extern void (*g_mirageStandaloneStart)();
+
+// The engine of the plug-in instance, for the standalone's virtual MIDI port
+// (src/plugin/mac/VirtualMidi.mm). Every format sets it; only the standalone reads it.
+extern std::atomic<mirage::MirageEngine*> g_mirageEngine;
 
 END_NAMESPACE_DISTRHO

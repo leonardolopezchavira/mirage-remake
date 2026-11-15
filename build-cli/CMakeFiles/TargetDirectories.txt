@@ -1,0 +1,7 @@
+/home/claude/mirage-remake/build-cli/CMakeFiles/mirage_engine.dir
+/home/claude/mirage-remake/build-cli/CMakeFiles/mirage_embedded.dir
+/home/claude/mirage-remake/build-cli/CMakeFiles/mirage_cli.dir
+/home/claude/mirage-remake/build-cli/CMakeFiles/mirage_disk_check.dir
+/home/claude/mirage-remake/build-cli/CMakeFiles/mirage_engine_check.dir
+/home/claude/mirage-remake/build-cli/CMakeFiles/edit_cache.dir
+/home/claude/mirage-remake/build-cli/CMakeFiles/rebuild_cache.dir

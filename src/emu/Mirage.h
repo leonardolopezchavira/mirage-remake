@@ -39,6 +39,8 @@ public:
     void render(float* out, int frames, const float* in = nullptr);
 
     void midiIn(uint8_t b) { acia_.receive(b); }
+    // Called with every byte the OS transmits on MIDI OUT (from the CPU thread).
+    void setMidiOut(std::function<void(uint8_t)> f) { acia_.onTx = std::move(f); }
     void setKey(int key, bool down);
     void setPitchWheel(uint8_t v) { pitch_ = v; }
     void setModWheel(uint8_t v) { mod_ = v; }

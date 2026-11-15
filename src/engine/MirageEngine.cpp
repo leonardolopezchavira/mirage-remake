@@ -8,6 +8,7 @@ MirageEngine::MirageEngine(const std::vector<uint8_t>& rom, const std::vector<ui
                            const std::string& bootDiskName)
 {
     m_.loadRom(rom);
+    m_.setMidiOut([this](uint8_t b) { midiOut_.push(&b, 1); });
     m_.reset();
     m_.fdc().insert(bootDisk);
     diskName_ = bootDiskName;
@@ -100,6 +101,7 @@ void MirageEngine::process(float* out, int frames, const float* in)
 
     // Editor input
     uiMidi_.drain([this](uint8_t b) { m_.midiIn(b); });
+    extMidi_.drain([this](uint8_t b) { m_.midiIn(b); });
     const uint32_t k = keys_.load(), changed = k ^ appliedKeys_.load();
     if (changed) {
         for (int bit = 0; bit < 24; ++bit)

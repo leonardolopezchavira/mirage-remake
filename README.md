@@ -104,6 +104,26 @@ xattr -dr com.apple.quarantine /Applications/Mirage.app ~/Library/Audio/Plug-Ins
 As on the hardware, the input passes through voice 7's filter (the input filter) into the
 8-bit converter, paced by the VIA timer at the sampling rate.
 
+### Editors (BoxedEar Visage) and MIDI out
+
+The standalone app creates a virtual MIDI port named **Mirage Remake**, as both a source
+and a destination. It is the emulated Mirage's two MIDI sockets: whatever the OS sends
+through its MIDI OUT (SysEx dumps, parameter changes, program and wavesample status, MIDI
+echo) comes out of the source, and the destination plays into its MIDI IN alongside the
+keyboards chosen in Settings. Any editor, librarian or DAW on the Mac can use it.
+
+To use [BoxedEar Visage](https://boxedear.com/software/visage.html):
+1. Download Visage and the MASOS_BE disk from BoxedEar (they are BoxedEar's and are not
+   included here).
+2. In Mirage, **Open…** `MASOS_BE-v1.0.0.hfe`. It boots like the hardware does from a Gotek;
+   then load your sounds from your sound disks as usual.
+3. In Visage, choose **Mirage Remake** for both MIDI input and MIDI output.
+
+MASOS_BE sends its configuration and both program dumps at boot and answers the requests
+in BoxedEar's published MIDI spec. Stock OS 3.2 sends only notes and program changes.
+The port exists in the standalone app only. In a DAW, use the DAW's own MIDI routing (the
+plug-ins have no MIDI output yet).
+
 ## Not done yet
 - **The DSK-8 keyboard controller** (R6500/11) is not emulated. Play from MIDI, as with the
   DMS-8 rack.

@@ -39,7 +39,8 @@ option(MIRAGE_BUILD_PLUGIN "Build the plug-ins and the standalone app" ON)
 if(MIRAGE_BUILD_PLUGIN)
   # Local DPF patches (kept out of the submodule), applied in order. A stamp in the DPF
   # tree records which patch set is applied; when the patches change, DPF is reset first.
-  set(MIRAGE_DPF_PATCHES dpf-standalone-settings.patch dpf-swap-interval.patch dpf-audio-input.patch)
+  set(MIRAGE_DPF_PATCHES dpf-standalone-settings.patch dpf-swap-interval.patch dpf-audio-input.patch
+      dpf-virtual-midi.patch)
   set(MIRAGE_DPF_DIR ${CMAKE_SOURCE_DIR}/third_party/DPF)
   set(patch_hash "")
   foreach(patch ${MIRAGE_DPF_PATCHES})
@@ -95,9 +96,10 @@ if(MIRAGE_BUILD_PLUGIN)
   endfunction()
 
   if(APPLE AND TARGET Mirage-jack)
-    target_sources(Mirage-jack PRIVATE src/plugin/mac/StandaloneSettings.mm)
-    set_source_files_properties(src/plugin/mac/StandaloneSettings.mm PROPERTIES COMPILE_FLAGS -fobjc-arc)
-    target_link_libraries(Mirage-jack PRIVATE "-framework Cocoa")
+    target_sources(Mirage-jack PRIVATE src/plugin/mac/StandaloneSettings.mm src/plugin/mac/VirtualMidi.mm)
+    set_source_files_properties(src/plugin/mac/StandaloneSettings.mm src/plugin/mac/VirtualMidi.mm
+                                PROPERTIES COMPILE_FLAGS -fobjc-arc)
+    target_link_libraries(Mirage-jack PRIVATE "-framework Cocoa" "-framework CoreMIDI")
     target_include_directories(Mirage-jack PRIVATE src/plugin)
     set_target_properties(Mirage-jack PROPERTIES
       MACOSX_BUNDLE TRUE

@@ -1,0 +1,35 @@
+--- a/distrho/src/jackbridge/RtAudioBridge.hpp
++++ b/distrho/src/jackbridge/RtAudioBridge.hpp
+@@ -243,6 +243,8 @@
+                 RtMidiIn midiIn(RtMidi::RTMIDI_API_TYPE, name.buffer());
+                 if (_isMidiInDisabled(midiIn.getPortName(i)))  // sq80-remake
+                     continue;
++                if (_isOwnVirtualPort(midiIn.getPortName(i)))  // mirage-remake
++                    continue;
+                 midiIn.setCallback(RtMidiCallback, this);
+                 midiIn.openPort(i);
+                 midiIns.push_back(std::move(midiIn));
+@@ -327,7 +329,8 @@
+         try {
+             RtMidiIn midiIn(RtMidi::RTMIDI_API_TYPE, name.buffer());
+             for (uint i = 0, count = midiIn.getPortCount(); i < count; ++i)
+-                names.push_back(midiIn.getPortName(i));
++                if (!_isOwnVirtualPort(midiIn.getPortName(i)))  // mirage-remake
++                    names.push_back(midiIn.getPortName(i));
+         } catch (const RtMidiError& err) {
+             d_safe_exception(err.getMessage().c_str(), __FILE__, __LINE__);
+         } DISTRHO_SAFE_EXCEPTION("getMIDIInputNames");
+@@ -347,6 +350,13 @@
+         return requestMIDI();
+     }
+ 
++    // mirage-remake: the app's own virtual "Mirage Remake" port carries the Mirage's MIDI
++    // out to editors; reading it back in would loop the Mirage into itself.
++    static bool _isOwnVirtualPort(const std::string& portName)
++    {
++        return portName.find("Mirage Remake") != std::string::npos;
++    }
++
+     bool _isMidiInDisabled(const std::string& portName) const
+     {
+         for (const std::string& disabled : disabledMidiIns)

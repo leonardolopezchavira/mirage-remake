@@ -1,0 +1,22 @@
+# ninja log v5
+4278	5240	1794709724881234064	CMakeFiles/mirage_embedded.dir/EmbeddedData.cpp.o	89f6e5c468d830e7
+5240	5293	1794709724937234067	libmirage_embedded.a	efad87acfd16dc3a
+4279	5175	1794709724821234060	CMakeFiles/mirage_engine_check.dir/tests/engine_check.cpp.o	cd2498f6ea119f75
+3185	4278	1794709723917234007	/home/claude/mirage-remake/build-cli/EmbeddedData.cpp	1930b65b9c095ea2
+1	758	1794709720407172995	CMakeFiles/mirage_engine.dir/src/emu/Via6522.cpp.o	66ed615b9fcfe4e9
+1012	2682	1794709722325233912	CMakeFiles/mirage_engine.dir/src/emu/Mirage.cpp.o	7a062e6e196b40fe
+1	1012	1794709720657233813	CMakeFiles/mirage_engine.dir/src/emu/Wd1772.cpp.o	f55f8591fd56e74e
+3392	3463	1794709723109233959	mirage_disk_check	73bf6f1fb97abc63
+1	1158	1794709720801233821	CMakeFiles/mirage_engine.dir/src/emu/Cpu6809.cpp.o	16d20e78f9fefc6a
+1158	2634	1794709722277233909	CMakeFiles/mirage_engine.dir/src/engine/MirageEngine.cpp.o	81edef1162229ae3
+5293	5366	1794709725014151010	mirage_engine_check	734e6ed1f6334742
+758	1282	1794709720931142564	CMakeFiles/mirage_engine.dir/src/emu/Es5503.cpp.o	9caaaf8024f0a2aa
+2682	3184	1794709722829233942	libmirage_engine.a	159debcf7c6b9f46
+1282	1790	1794709721433233859	CMakeFiles/mirage_engine.dir/src/engine/DiskImage.cpp.o	cebf4878f6558af7
+2634	3392	1794709722895769901	CMakeFiles/mirage_disk_check.dir/tests/disk_check.cpp.o	a31bfd80c5372765
+2	1121	1794709773321236943	CMakeFiles/mirage_cli.dir/tools/mirage_cli.cpp.o	3e225aa6746b98a6
+1121	1191	1794709773396394846	mirage_cli	cb9465546447c555
+3185	4278	1794709723917234007	EmbeddedData.cpp	1930b65b9c095ea2
+1	39	1794709898227456123	build.ninja	9678b20e1d3342f7
+1	880	1794709899114587441	CMakeFiles/mirage_engine_check.dir/tests/engine_check.cpp.o	cd2498f6ea119f75
+880	945	1794709899178504581	mirage_engine_check	734e6ed1f6334742

@@ -7,6 +7,7 @@
 //   - an Audio/MIDI Settings window: output device, sample rate, buffer size, the audio input
 //     used for sampling (any device, any channel or channel pair) and which MIDI inputs play
 //     Mirage, with a Rescan button for devices plugged in later,
+//   - a virtual MIDI port pair, "Mirage Remake", for editors (VirtualMidi.mm),
 //   - and restores those choices at launch (NSUserDefaults, domain
 //     com.github.leonardolopezchavira.mirage).
 // The device and MIDI control itself is in patches/dpf-standalone-settings.patch.
@@ -23,6 +24,8 @@
 #include "StandaloneHook.h"
 
 namespace dpf = DISTRHO_NAMESPACE;
+
+void mirageStartVirtualMidi();  // VirtualMidi.mm
 
 static NSString* const kDeviceKey = @"AudioOutputDevice";
 static NSString* const kSampleRateKey = @"SampleRate";
@@ -257,7 +260,13 @@ static NSTextField* makeLabel(NSString* text) {
                                           target:self
                                           action:@selector(rescanMidi:)];
 
-    NSStackView* content = [NSStackView stackViewWithViews:@[ audioGrid, midiTitle, self.midiStack, rescan ]];
+    NSTextField* editorNote = [NSTextField wrappingLabelWithString:
+        @"Editors and librarians (for example BoxedEar Visage with MASOS_BE): choose the MIDI port "
+         \"Mirage Remake\" as both input and output. It carries Mirage's MIDI OUT and feeds its MIDI IN."];
+    editorNote.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+    editorNote.textColor = NSColor.secondaryLabelColor;
+    [editorNote.widthAnchor constraintLessThanOrEqualToConstant:420].active = YES;
+    NSStackView* content = [NSStackView stackViewWithViews:@[ audioGrid, midiTitle, self.midiStack, rescan, editorNote ]];
     content.orientation = NSUserInterfaceLayoutOrientationVertical;
     content.alignment = NSLayoutAttributeLeading;
     content.spacing = 12;
@@ -544,6 +553,7 @@ void startStandalone()
     started = true;
 
     [[MirageSettingsController shared] installMenu];
+    mirageStartVirtualMidi();
     // The editor opens while DPF is still setting up the audio client: apply the saved device,
     // rate and buffer once the program is running, when sample rate changes reach the plug-in.
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),

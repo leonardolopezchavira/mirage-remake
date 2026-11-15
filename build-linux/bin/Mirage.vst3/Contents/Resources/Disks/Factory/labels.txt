@@ -1,0 +1,30 @@
+A1	Ambient Drums / Latin Percussion / Vibraphone
+A2	Clav / Electric Piano #1 / Drawbar Organ #1
+A3	Voices: Ta / Doo / Male-Female
+A4	Stacked & High Strings
+A5	Baritone Sax / Punchy Alto Sax
+A6	Steel String / Ambient Drums
+A7	Rock Guitar 5ths / Solo Rock Guitar
+A8	Cup Gong / Crotales / Orch Bells
+A9	Strummed Piano / Unprepared Piano / Gongs
+A10	Pipe Organ Hit / Mark Tree / Orch Hits
+B1	Electronic Drums / Orch Percussion / Xylophone
+B2	Piano +1 / Digital Piano / Drawbar Organ #2
+B3	Low & High Voices "Ah"
+B4	Cellos / Violins
+B5	Solo Cello / Flute
+B6	Nylon String Guitar
+B7	23 Synth Sounds on Wheels
+B8	Marimba / Breathy Bass / Tympello
+B9	Full Pipe Organ
+B10	Piano Harmonic / Bell Tree / Sustained Piano
+C1	4 Trombones / Horn Section Unison
+C2	Low Mando Voices / Hiss Vocals
+C3	Fretless Bass / Keyboard Harmonica
+C4	Hammer Dulcimer
+C5	Chainsawed Bass / Plucked Bass
+C6	Acoustic Piano
+C7	Upright Bass / Sax
+C8	Brass Fall-off / Brass Section
+C9	Electric Bass / Piano-Organ
+C10	Bell-Electric Piano / Voices

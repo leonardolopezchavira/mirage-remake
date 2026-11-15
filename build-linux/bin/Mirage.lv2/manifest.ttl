@@ -1,0 +1,30 @@
+@prefix lv2:  <http://lv2plug.in/ns/lv2core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix opts: <http://lv2plug.in/ns/ext/options#> .
+@prefix ui:   <http://lv2plug.in/ns/extensions/ui#> .
+
+<urn:mirage-remake:mirage>
+    a lv2:Plugin ;
+    lv2:binary <Mirage.so> ;
+    rdfs:seeAlso <Mirage.ttl> .
+
+<urn:mirage-remake:mirage#DPF_UI>
+    a ui:X11UI ;
+    ui:binary <Mirage.so> ;
+    lv2:extensionData opts:interface ,
+                      ui:idleInterface ,
+                      ui:showInterface ;
+
+    lv2:optionalFeature ui:parent ,
+                        ui:touch ,
+                        ui:requestValue ;
+
+    lv2:requiredFeature opts:options ,
+                        ui:idleInterface ,
+                        <http://lv2plug.in/ns/ext/data-access> ,
+                        <http://lv2plug.in/ns/ext/instance-access> ,
+                        <http://lv2plug.in/ns/ext/urid#map> ;
+
+    opts:supportedOption <http://lv2plug.in/ns/ext/parameters#sampleRate> .
+
+

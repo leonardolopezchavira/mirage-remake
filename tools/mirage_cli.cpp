@@ -5,10 +5,12 @@
 //   key <name> [ms]      press a front-panel key (default 100 ms)
 //   midi <hex bytes...>  send MIDI bytes (comma or space separated hex in one arg: 90,3c,7f)
 //   wav <file> <seconds> render audio to a 16-bit WAV at 125 kHz -> 44.1 kHz
+//   midiout              print (and clear) the bytes the Mirage sent on MIDI OUT
 //   show                 print the display
 //   regs                 print CPU registers
 //   peek <hexaddr> <n>
 #include "../src/emu/Mirage.h"
+#include "../src/engine/DiskImage.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -73,13 +75,17 @@ int main(int argc, char** argv)
     if (argc < 2) { std::fprintf(stderr, "usage: %s rom.bin [commands]\n", argv[0]); return 1; }
     Mirage m;
     if (!m.loadRom(readFile(argv[1]))) { std::fprintf(stderr, "bad rom\n"); return 1; }
+    std::vector<uint8_t> tx;
+    m.setMidiOut([&](uint8_t b) { tx.push_back(b); if (getenv("MIRAGE_TX_TRACE")) std::printf("tx %02X pc=%04X t=%.4f\n", b, m.cpu().pc, m.cycles() / Mirage::kCpuHz); });
     m.reset();
     for (int i = 2; i < argc; ++i) {
         std::string c = argv[i];
         auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
         if (c == "disk") {
             auto p = next();
-            if (!m.fdc().insert(readFile(p))) std::printf("disk: bad image %s\n", p.c_str());
+            std::vector<uint8_t> img; std::string err;
+            if (!decodeDiskImage(readFile(p), img, err) || !m.fdc().insert(img))
+                std::printf("disk: bad image %s %s\n", p.c_str(), err.c_str());
         } else if (c == "eject") {
             m.fdc().eject();
         } else if (c == "run") {
@@ -100,6 +106,11 @@ int main(int argc, char** argv)
             std::istringstream ss(hex);
             std::string b;
             while (ss >> b) m.midiIn(uint8_t(std::strtoul(b.c_str(), nullptr, 16)));
+        } else if (c == "midiout") {
+            std::printf("midi out (%zu):", tx.size());
+            for (size_t k = 0; k < tx.size(); ++k) std::printf("%s%02X", (k && tx[k] == 0xF0) ? "\n " : " ", tx[k]);
+            std::printf("\n");
+            tx.clear();
         } else if (c == "bp") {
             unsigned addr = unsigned(std::strtoul(next().c_str(), nullptr, 16));
             double sec = std::atof(next().c_str());

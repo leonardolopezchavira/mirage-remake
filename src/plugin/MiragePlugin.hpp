@@ -33,7 +33,7 @@ public:
     // parameter defaults, so the standalone app comes back the way it was left.
     void savePreference(const std::string& key, float value);
     float preference(const std::string& key, float fallback) const;
-    ~MiragePlugin() override { flushWrittenDisk(); }
+    ~MiragePlugin() override;
 
 protected:
     const char* getLabel() const override { return "Mirage"; }

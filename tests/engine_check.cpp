@@ -22,6 +22,12 @@ int main()
                 std::chrono::duration<double>(t1 - t0).count(), e.machine().cycles() / Mirage::kCpuHz,
                 e.display(0), e.display(1));
 
+    // MIDI OUT: OS 3.2 sends a program change (C0 00) once it has booted.
+    std::vector<uint8_t> out;
+    e.drainMidiOut([&](uint8_t b) { out.push_back(b); });
+    const bool midiOut = out.size() >= 2 && out[0] == 0xC0;
+    std::printf("midi out after boot: %zu bytes%s\n", out.size(), midiOut ? " (program change)" : "");
+
     std::vector<float> buf(256);
     auto block = [&](int n, double& peak) {
         for (int i = 0; i < n; ++i) {
@@ -31,7 +37,8 @@ int main()
     };
     double quiet = 0, loud = 0, tail = 0;
     block(100, quiet);
-    for (uint8_t n : {48, 52, 55, 60}) { e.midiByte(0x90); e.midiByte(n); e.midiByte(100); }
+    // the chord comes in through the external (virtual port) MIDI ring
+    for (uint8_t n : {48, 52, 55, 60}) { const uint8_t on[3] = {0x90, n, 100}; e.postExternalMidi(on, 3); }
     auto t2 = std::chrono::steady_clock::now();
     block(375, loud); // 2 s
     auto t3 = std::chrono::steady_clock::now();
@@ -72,7 +79,7 @@ int main()
     const double hz = zc / 2.0 / ((rec.size() - 9601) / 48000.0);
     std::printf("sampling: level-detect %d, finished (SF) %d, playback %.1f Hz\n", levelDetect, finished, hz);
 
-    bool ok = quiet < 0.01 && loud > 0.05 && rt > 2.0 && levelDetect && finished && std::fabs(hz - 440.8) < 2.0;
+    bool ok = midiOut && quiet < 0.01 && loud > 0.05 && rt > 2.0 && levelDetect && finished && std::fabs(hz - 440.8) < 2.0;
     std::printf("%s\n", ok ? "ENGINE OK" : "ENGINE FAIL");
     return ok ? 0 : 1;
 }

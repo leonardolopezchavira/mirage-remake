@@ -2,6 +2,7 @@
 #include "DistrhoPluginUtils.hpp"
 #include "EmbeddedData.h"
 #include "../engine/DiskImage.h"
+#include "StandaloneHook.h"
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -79,7 +80,17 @@ MiragePlugin::MiragePlugin() : Plugin(kParamCount, 0, 1)
     engine_ = std::make_unique<mirage::MirageEngine>(rom, boot, embedded::kBootDiskName);
     engine_->setSampleRate(getSampleRate());
     scanDisks();
+    g_mirageEngine.store(engine_.get());
 }
+
+MiragePlugin::~MiragePlugin()
+{
+    flushWrittenDisk();
+    mirage::MirageEngine* mine = engine_.get();
+    g_mirageEngine.compare_exchange_strong(mine, nullptr);
+}
+
+std::atomic<mirage::MirageEngine*> g_mirageEngine{nullptr};
 
 std::string MiragePlugin::userDiskDir() const
 {
