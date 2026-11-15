@@ -262,7 +262,7 @@ static NSTextField* makeLabel(NSString* text) {
 
     NSTextField* editorNote = [NSTextField wrappingLabelWithString:
         @"Editors and librarians (for example BoxedEar Visage with MASOS_BE): choose the MIDI port "
-         \"Mirage Remake\" as both input and output. It carries Mirage's MIDI OUT and feeds its MIDI IN."];
+         @"\"Mirage Remake\" as both input and output. It carries Mirage's MIDI OUT and feeds its MIDI IN."];
     editorNote.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
     editorNote.textColor = NSColor.secondaryLabelColor;
     [editorNote.widthAnchor constraintLessThanOrEqualToConstant:420].active = YES;
