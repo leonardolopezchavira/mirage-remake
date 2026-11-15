@@ -48,21 +48,15 @@ public:
         label(g, 302, 23, "PROGRAM", 9, kDim, NanoVG::ALIGN_RIGHT, 1.5f);
         label(g, 532, 23, "WAVESAMPLE", 9, kDim, NanoVG::ALIGN_RIGHT, 1.5f);
         pill(g, kRefresh.x, kRefresh.y, kRefresh.w, kRefresh.h, "Read again", false, true);
-        label(g, 1072, 24, on ? "Connected to MASOS" : "Not connected", 10,
+        pill(g, kKeymapBtn.x, kKeymapBtn.y, kKeymapBtn.w, kKeymapBtn.h, "Key map", keymapPage_, true);
+        label(g, 976, 24, on ? "Connected to MASOS" : "Not connected", 10,
               on ? Color(120, 220, 120) : Color(230, 140, 90), NanoVG::ALIGN_RIGHT);
 
-        // sections
-        section(g, 20, 52, 320, "PROGRAM");
-        section(g, 360, 52, 400, "FILTER ENVELOPE");
-        section(g, 360, 248, 400, "AMPLIFIER ENVELOPE");
-        section(g, 780, 52, 400, "WAVESAMPLE");
-        envelope(g, 360, 64, 400, 70, 40, kYellow);
-        envelope(g, 360, 260, 400, 70, 50, kYellow);
-        waveform(g, 780, 64, 400, 150);
-        section(g, 20, 292, 320, "KEYMAP");
-        keymap(g);
-
-        for (const auto& s : sliders_) slider(g, s, on);
+        if (keymapPage_) {
+            keymapGrid(g, on);
+        } else {
+            parameterPage(g, on);
+        }
 
         if (!on) {
             g.beginPath(); g.rect(0, 40, kEdW, kEdH - 40); g.fillColor(Color(0, 0, 0, 0.6f)); g.fill();
@@ -78,6 +72,7 @@ public:
     {
         const int h = link_.currentHalf();
         if (hit(kRefresh, x, y)) { link_.requestAll(); return true; }
+        if (hit(kKeymapBtn, x, y)) { keymapPage_ = !keymapPage_; return true; }
         if (!link_.connected()) return y > 0;
         for (const auto& t : tabs_) {
             if (!hit(t, x, y)) continue;
@@ -86,6 +81,7 @@ public:
             if (t.kind == TabWave) link_.selectWavesample(h, t.index);
             return true;
         }
+        if (keymapPage_) return gridMouseDown(x, y);
         for (size_t i = 0; i < sliders_.size(); ++i) {
             const auto& s = sliders_[i];
             if (x < s.x || x > s.x + s.w || y < s.y - 2 || y > s.y + kRowH - 2) continue;
@@ -127,17 +123,18 @@ public:
         if (dragSlider_ >= 0) { dragTo(x); return true; }
         if (dragMarker_) { dragMarkerTo(x); return true; }
         if (dragEdge_ >= 0) { dragEdgeTo(x); return true; }
+        if (dragGrid_) { gridSetTop(x); return true; }
         return false;
     }
 
-    void mouseUp() { dragSlider_ = -1; dragMarker_ = 0; dragEdge_ = -1; }
-    bool dragging() const { return dragSlider_ >= 0 || dragMarker_ != 0 || dragEdge_ >= 0; }
+    void mouseUp() { dragSlider_ = -1; dragMarker_ = 0; dragEdge_ = -1; dragGrid_ = false; }
+    bool dragging() const { return dragSlider_ >= 0 || dragMarker_ != 0 || dragEdge_ >= 0 || dragGrid_; }
 
     // Pointer moved with no button down: the keymap shows the band under it. True to repaint.
     bool hover(float x, float y)
     {
         int ws = -1;
-        if (link_.connected() && y >= kMapY && y <= kKeysY + kKeysH)
+        if (link_.connected() && !keymapPage_ && y >= kMapY && y <= kKeysY + kKeysH)
             for (const auto& b : keymapBands())
                 if (x >= edgeAfter(b.first - 1) && x < edgeAfter(b.last)) ws = b.ws;
         if (ws == hoverWs_) return false;
@@ -147,7 +144,7 @@ public:
 
     bool scroll(float x, float y, float dy)
     {
-        if (!link_.connected()) return false;
+        if (!link_.connected() || keymapPage_) return false;
         const int h = link_.currentHalf();
         for (const auto& s : sliders_) {
             if (x < s.x || x > s.x + s.w || y < s.y - 2 || y > s.y + kRowH - 2) continue;
@@ -173,7 +170,9 @@ private:
     std::vector<Tab> tabs_;
     std::vector<Slider> sliders_;
     int dragSlider_ = -1, dragMarker_ = 0, dragEdge_ = -1, hoverWs_ = -1;
+    bool keymapPage_ = false, dragGrid_ = false;
     const Rect kRefresh{1088, 12, 92, 20};
+    const Rect kKeymapBtn{990, 12, 90, 20};
     const Rect kWave{780, 64, 400, 150};
 
     template <class R> static bool hit(const R& r, float x, float y)
@@ -327,6 +326,21 @@ private:
         g.fillColor(Color(c.red, c.green, c.blue, 0.18f)); g.fill();
     }
 
+    void parameterPage(NanoVG& g, bool on)
+    {
+        section(g, 20, 52, 320, "PROGRAM");
+        section(g, 360, 52, 400, "FILTER ENVELOPE");
+        section(g, 360, 248, 400, "AMPLIFIER ENVELOPE");
+        section(g, 780, 52, 400, "WAVESAMPLE");
+        envelope(g, 360, 64, 400, 70, 40, kYellow);
+        envelope(g, 360, 260, 400, 70, 50, kYellow);
+        waveform(g, 780, 64, 400, 150);
+        section(g, 20, 292, 320, "KEYMAP");
+        keymap(g);
+
+        for (const auto& s : sliders_) slider(g, s, on);
+    }
+
     // ------------------------------------------------------------------ keymap
     // The 61 keys (top key 0 = the bottom C) and the wavesamples the selected program plays:
     // from its initial wavesample (27) upwards, each one taking the keys above the previous
@@ -452,6 +466,103 @@ private:
         label(g, kMapX, kKeysY + kKeysH + 14, info.c_str(), 10, Color(212, 214, 220), NanoVG::ALIGN_LEFT);
         label(g, kMapX, kKeysY + kKeysH + 30, "click a band to select it, drag a white line to move its top key", 9, kDim,
               NanoVG::ALIGN_LEFT);
+    }
+
+    // ------------------------------------------------------------------ key map page
+    // All 16 wavesamples, one row each (U8..U1 above L8..L1), one column per key: each row is
+    // filled from the bottom C up to the wavesample's top key, as in BoxedEar's Visage.
+    static constexpr float kGX = 60, kGW = 1120, kRowStep = 16, kUpperY = 72, kLowerY = 210, kGKeysY = 348, kGKeysH = 46;
+    const Rect kStepDown{460, 42, 24, 20}, kStepUp{554, 42, 24, 20};
+    const Color kBlue = Color(96, 150, 220);
+
+    static float colX(int k) { return kGX + kGW * float(k) / 61.0f; }
+    static float colW() { return kGW / 61.0f; }
+    static float rowY(int half, int ws) { return (half ? kUpperY : kLowerY) + float(7 - ws) * kRowStep; }
+
+    void keymapGrid(NanoVG& g, bool on)
+    {
+        const int h = link_.currentHalf(), sel = link_.half(h).wavesample;
+        const mirage::MasosParam& topP = *mirage::masosParam(72);
+        label(g, 20, 52, "Key map", 15, Color(240, 240, 240), NanoVG::ALIGN_LEFT);
+        char title[32];
+        std::snprintf(title, sizeof title, "Top key of %c%d", h ? 'U' : 'L', sel + 1);
+        label(g, 450, 52, title, 11, kDim, NanoVG::ALIGN_RIGHT);
+        pill(g, kStepDown.x, kStepDown.y, kStepDown.w, kStepDown.h, "\xE2\x80\xB9", false, on);
+        g.beginPath(); g.roundedRect(488, 42, 62, 20, 3); g.fillColor(Color(56, 58, 64)); g.fill();
+        label(g, 519, 53, on ? noteName(link_.value(h, 72)).c_str() : "--", 11, Color(240, 240, 240), NanoVG::ALIGN_CENTER);
+        pill(g, kStepUp.x, kStepUp.y, kStepUp.w, kStepUp.h, "\xE2\x80\xBA", false, on);
+        // legend
+        g.beginPath(); g.roundedRect(1046, 46, 10, 10, 2); g.fillColor(kYellow); g.fill();
+        label(g, 1062, 52, "Lower", 11, Color(212, 214, 220), NanoVG::ALIGN_LEFT);
+        g.beginPath(); g.roundedRect(1114, 46, 10, 10, 2); g.fillColor(kBlue); g.fill();
+        label(g, 1130, 52, "Upper", 11, Color(212, 214, 220), NanoVG::ALIGN_LEFT);
+
+        const float cw = colW();
+        for (int half = 1; half >= 0; --half) {
+            for (int ws = 7; ws >= 0; --ws) {
+                const float y = rowY(half, ws);
+                const bool selRow = on && half == h && ws == sel;
+                const int top = on && link_.half(half).valid ? std::min(60, link_.half(half).wavesampleRaw(ws, topP)) : -1;
+                const Color base = half ? kBlue : kYellow;
+                for (int k = 0; k <= 60; ++k) {
+                    const float x = colX(k);
+                    g.beginPath(); g.rect(x + 0.5f, y + 0.5f, cw - 1, kRowStep - 1);
+                    if (k <= top)
+                        g.fillColor(Color(base.red, base.green, base.blue, selRow ? 1.0f : 0.30f));
+                    else
+                        g.fillColor(isBlack(k) ? Color(30, 31, 34) : Color(42, 43, 47));
+                    g.fill();
+                }
+                char name[8];
+                std::snprintf(name, sizeof name, "%c%d", half ? 'U' : 'L', ws + 1);
+                if (selRow) { g.beginPath(); g.rect(20, y, 36, kRowStep); g.fillColor(Color(70, 72, 78)); g.fill(); }
+                label(g, 50, y + kRowStep / 2 + 1, name, selRow ? 11 : 10, selRow ? Color(255, 255, 255) : kDim,
+                      NanoVG::ALIGN_RIGHT);
+            }
+        }
+        // the selected wavesample's range, repeated just above the keys
+        if (on) {
+            const int top = std::min(60, link_.value(h, 72));
+            g.beginPath(); g.rect(kGX, kGKeysY - 6, colX(top + 1) - kGX, 3);
+            g.fillColor(h ? kBlue : kYellow); g.fill();
+        }
+        // keys: white keys drawn, black keys left as gaps
+        for (int k = 0; k <= 60; ++k) {
+            if (isBlack(k)) continue;
+            g.beginPath(); g.rect(colX(k) + 0.5f, kGKeysY, cw - 1, kGKeysH);
+            g.fillColor(Color(226, 224, 216)); g.fill();
+            if (k % 12 == 0) {
+                char c[8];
+                std::snprintf(c, sizeof c, "C%d", k / 12 + 2);
+                label(g, colX(k) + 2, kGKeysY + kGKeysH - 7, c, 8, Color(110, 110, 110), NanoVG::ALIGN_LEFT);
+            }
+        }
+        label(g, 20, 418, "Click a row to select that wavesample; click or drag in the selected row to set its top key.", 9,
+              kDim, NanoVG::ALIGN_LEFT);
+    }
+
+    bool gridMouseDown(float x, float y)
+    {
+        const int h = link_.currentHalf(), sel = link_.half(h).wavesample;
+        if (hit(kStepDown, x, y)) { link_.setParam(h, 72, link_.value(h, 72) - 1); return true; }
+        if (hit(kStepUp, x, y)) { link_.setParam(h, 72, link_.value(h, 72) + 1); return true; }
+        if (x < 20 || x > kGX + kGW) return true;
+        for (int half = 0; half < 2; ++half)
+            for (int ws = 0; ws < 8; ++ws) {
+                const float ry = rowY(half, ws);
+                if (y < ry || y >= ry + kRowStep) continue;
+                if (half != h || ws != sel) { link_.selectWavesample(half, ws); return true; }
+                if (x >= kGX) { dragGrid_ = true; gridSetTop(x); }
+                return true;
+            }
+        return true;
+    }
+
+    void gridSetTop(float x)
+    {
+        const int h = link_.currentHalf();
+        const int k = std::clamp(int((x - kGX) / colW()), 0, 60);
+        if (k != link_.value(h, 72)) link_.setParam(h, 72, k);
     }
 
     void waveform(NanoVG& g, float x, float y, float w, float hgt)

@@ -123,7 +123,10 @@ lines on the waveform to move the loop. **Lower/Upper**, **Program 1–4** and
 **Wavesample 1–8** select what you edit (and play), as the Mirage's own keys do. The
 **keymap** under the program shows which wavesample plays which keys in the selected
 program (starting from its initial wavesample, ▸): click a band to select that
-wavesample, drag a white line to move its top key. Values
+wavesample, drag a white line to move its top key. **Key map** (in the editor's header)
+switches to a full key map of all 16 wavesamples, laid out like BoxedEar Visage's: one row
+per wavesample (U8–U1, L8–L1), filled from the bottom C up to its top key. Click a row to
+select it, then click or drag in it (or use ‹ ›) to set its top key. Values
 appear as the Mirage's display shows them, and edits on the front panel show up in the
 editor straight away. Click **Editor** again to bring the keyboard back.
 
