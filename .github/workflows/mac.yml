@@ -30,6 +30,8 @@ jobs:
         run: cmake --build build
       - name: Engine check (boot, filter tuning, chord, speed)
         run: ./build/mirage_engine_check
+      - name: Editor protocol check (MASOS dumps, bundled MASOS v2)
+        run: ./build/mirage_masos_check resources/disks/OS/masos.img
       - name: The standalone app was built for both architectures
         run: |
           test -x build/bin/Mirage.app/Contents/MacOS/Mirage

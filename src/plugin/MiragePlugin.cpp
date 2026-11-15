@@ -81,6 +81,10 @@ MiragePlugin::MiragePlugin() : Plugin(kParamCount, 0, 1)
     engine_->setSampleRate(getSampleRate());
     scanDisks();
     g_mirageEngine.store(engine_.get());
+    // Development: MIRAGE_BOOT_DISK=<image> boots from that disk instead (e.g. MASOS_BE).
+    if (const char* boot = std::getenv("MIRAGE_BOOT_DISK")) {
+        if (loadDiskFile(boot, nullptr)) engine_->restart();
+    }
 }
 
 MiragePlugin::~MiragePlugin()

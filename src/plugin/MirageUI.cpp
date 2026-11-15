@@ -7,9 +7,11 @@
 #include "MiragePlugin.hpp"
 #include "StandaloneHook.h"
 #include "EmbeddedData.h"
+#include "EditorView.hpp"
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <memory>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -33,7 +35,7 @@ const Color kKeyBlackDark(16, 17, 20);
 const Color kLedOn(250, 240, 70), kLedOff(30, 30, 14), kLedWindow(12, 14, 9);
 
 enum KeyColour { Grey, Yellow, White, Black, Small };
-enum Action { ActNone = 0, ActDiskPrev, ActDiskNext, ActDiskOpen, ActFactoryTuning, ActDiskNew };
+enum Action { ActNone = 0, ActDiskPrev, ActDiskNext, ActDiskOpen, ActFactoryTuning, ActDiskNew, ActEditor };
 
 struct Button {
     float cx, cy;        // centre of the key
@@ -59,6 +61,8 @@ public:
         // mouse coordinates and getWidth()).
         setGeometryConstraints(uint(kW * 0.6f), uint(kH * 0.6f), true, false);
         plugin_ = static_cast<MiragePlugin*>(getPluginInstancePointer());
+        editor_.reset(new EditorView(plugin_->masos(), plugin_->engine()));
+        wantEditor_ = plugin_->preference("editor_open", 0.0f) > 0.5f;
         // Standalone app only (null in every plug-in format): menus, settings, MIDI inputs.
         if (g_mirageStandaloneStart) g_mirageStandaloneStart();
 
@@ -93,6 +97,7 @@ public:
         // Disk library (an addition: picks the disk image in the drive)
         buttons_.push_back({868, 152, "\xE2\x97\x80", -1, ActDiskPrev, Small, 22, 13});
         buttons_.push_back({896, 152, "\xE2\x96\xB6", -1, ActDiskNext, Small, 22, 13});
+        buttons_.push_back({1012, 152, "Editor", -1, ActEditor, Small, 50, 13});
         buttons_.push_back({1078, 152, "New", -1, ActDiskNew, Small, 40, 13});
         buttons_.push_back({1126, 152, "Open\xE2\x80\xA6", -1, ActDiskOpen, Small, 44, 13});
 
@@ -131,6 +136,8 @@ protected:
         }
         if (statusTicks_ > 0 && --statusTicks_ == 0) { status_.clear(); repaint(); }
         if (powerOffTicks_ > 0 && --powerOffTicks_ == 0) repaint();
+        if (wantEditor_ != editorOpen_) setEditorOpen(wantEditor_);
+        idleEditor(motor);
         const std::string saved = plugin_->flushWrittenDisk();
         if (!saved.empty()) { showStatus("Saved to your disk folder"); repaint(); }
     }
@@ -155,7 +162,14 @@ protected:
         scale(s, s);
         fontFace(NANOVG_DEJAVU_SANS_TTF);
         drawRack();
-        drawKeyboard();
+        if (editorOpen_) {          // the editor takes the keyboard's place
+            save();
+            translate(0, kRackH);
+            editor_->draw(*this);
+            restore();
+        } else {
+            drawKeyboard();
+        }
     }
 
     bool onMouse(const MouseEvent& ev) override
@@ -163,6 +177,12 @@ protected:
         const float s = getWidth() / kW;
         const float x = float(ev.pos.getX()) / s, y = float(ev.pos.getY()) / s;
         if (ev.button != 1) return false;
+        if (ev.press && editorOpen_ && y >= kRackH) {
+            editor_->mouseDown(x, y - kRackH);
+            repaint();
+            return true;
+        }
+        if (!ev.press && editor_->dragging()) { editor_->mouseUp(); repaint(); return true; }
         if (ev.press) {
             if (x >= 34 && x <= 80 && y >= 124 && y <= 212) { powerCycle(); return true; }
             if (x >= 140 && x <= 205 && y >= kVolTop - 8 && y <= kVolBot + 8) { draggingVol_ = true; setVolumeFromY(y); return true; }
@@ -194,11 +214,20 @@ protected:
         return false;
     }
 
+    bool onScroll(const ScrollEvent& ev) override
+    {
+        const float s = getWidth() / kW;
+        const float x = float(ev.pos.getX()) / s, y = float(ev.pos.getY()) / s;
+        if (editorOpen_ && y >= kRackH && editor_->scroll(x, y - kRackH, float(ev.delta.getY()))) { repaint(); return true; }
+        return false;
+    }
+
     bool onMotion(const MotionEvent& ev) override
     {
         const float s = getWidth() / kW;
         const float x = float(ev.pos.getX()) / s, y = float(ev.pos.getY()) / s;
         if (draggingVol_) { setVolumeFromY(y); return true; }
+        if (editor_->dragging()) { editor_->mouseMove(x, y - kRackH); repaint(); return true; }
         if (playing_ >= 0) {
             const int n = noteAt(x, y);
             if (n != playing_) { noteOff(); if (n >= 0) noteOn(n); }
@@ -253,9 +282,47 @@ private:
     int statusTicks_ = 0;   // idle calls left before the status message clears
     int powerOffTicks_ = 0; // idle calls left with the POWER rocker drawn off
 
+    // ------------------------------------------------------------------ editor
+    std::unique_ptr<EditorView> editor_;
+    bool editorOpen_ = false, wantEditor_ = false, wasMotor_ = false;
+    uint64_t editorRev_ = 0;
+    double nextRetryMs_ = 0;
+
+    static double nowMs()
+    {
+        return std::chrono::duration<double, std::milli>(Clock::now().time_since_epoch()).count();
+    }
+
+    void setEditorOpen(bool open)
+    {
+        editorOpen_ = wantEditor_ = open;
+        const float h = open ? kRackH + EditorView::kEdH : kH;
+        const double w = getWidth();
+        setGeometryConstraints(uint(kW * 0.6f), uint(h * 0.6f), true, false);
+        setSize(uint(w), uint(std::lround(w * h / kW)));
+        plugin_->savePreference("editor_open", open ? 1.0f : 0.0f);
+        repaint();
+    }
+
+    void idleEditor(bool motor)
+    {
+        auto& link = plugin_->masos();
+        auto& e = plugin_->engine();
+        e.drainEditorMidiOut([&](uint8_t b) { link.receive(b); });
+        const double now = nowMs();
+        // after the drive stops (a sound or a new OS loaded), read both halves again
+        if (wasMotor_ && !motor) link.requestAll();
+        wasMotor_ = motor;
+        // until MASOS answers, ask again every few seconds (OS 3.2 ignores the request)
+        if (editorOpen_ && !link.connected() && now >= nextRetryMs_) { link.requestAll(); nextRetryMs_ = now + 3000; }
+        link.pump(now, [&](const uint8_t* p, int n) { e.postMidi(p, n); });
+        if (link.revision() != editorRev_) { editorRev_ = link.revision(); if (editorOpen_) repaint(); }
+    }
+
     void powerCycle()
     {
         plugin_->engine().restart();
+        plugin_->masos().reset();     // MASOS sends its dumps again when it has booted
         powerOffTicks_ = 12;
         showStatus("Restarting: booting from the disk in the drive");
     }
@@ -515,6 +582,7 @@ private:
         if (b.colour == Black) { strokeColor(Color(90, 94, 102)); strokeWidth(1); stroke(); }
         if (!down) { beginPath(); rect(x + 1.5f, y + 1, b.w - 3, 1); fillColor(Color(255, 255, 255, 70)); fill(); }
 
+        if (b.label == nullptr || b.label[0] == '\0') return;
         if (b.colour == Small) {
             fontSize(9); fillColor(Color(235, 236, 240)); textAlign(ALIGN_CENTER | ALIGN_MIDDLE);
             text(b.cx, y + b.h / 2 + 0.5f, b.label, nullptr);
@@ -655,6 +723,7 @@ private:
                                      : "Factory tuning off: original 8 MHz clock");
             return;
         }
+        if (a == ActEditor) { setEditorOpen(!editorOpen_); return; }
         if (a == ActDiskNew) {
             std::string err;
             const int idx = plugin_->newDisk(&err);

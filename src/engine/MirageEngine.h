@@ -58,6 +58,8 @@ public:
     bool postExternalMidi(const uint8_t* p, int n) { return extMidi_.push(p, n); }
     // MIDI OUT of the emulated Mirage: bytes in the order the OS sent them, for one reader thread.
     template <class F> void drainMidiOut(F&& f) { midiOut_.drain(f); }
+    // The same bytes again, for the built-in editor (its own reader thread).
+    template <class F> void drainEditorMidiOut(F&& f) { editorOut_.drain(f); }
     // Power the Mirage off and on: it boots again from the disk in the drive (the way to
     // load another operating system, as on the hardware). Done by the audio thread.
     void restart() { restartPending_.store(true); }
@@ -97,7 +99,7 @@ private:
     std::vector<float> scratch_, inScratch_;
     float lastIn_ = 0.0f;
 
-    ByteRing uiMidi_, extMidi_, midiOut_;
+    ByteRing uiMidi_, extMidi_, midiOut_, editorOut_;
     std::atomic<bool> restartPending_{false};
     std::atomic<uint32_t> keys_{0}, appliedKeys_{0};
 

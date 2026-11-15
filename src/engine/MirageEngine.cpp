@@ -8,7 +8,7 @@ MirageEngine::MirageEngine(const std::vector<uint8_t>& rom, const std::vector<ui
                            const std::string& bootDiskName)
 {
     m_.loadRom(rom);
-    m_.setMidiOut([this](uint8_t b) { midiOut_.push(&b, 1); });
+    m_.setMidiOut([this](uint8_t b) { midiOut_.push(&b, 1); editorOut_.push(&b, 1); });
     m_.reset();
     m_.fdc().insert(bootDisk);
     diskName_ = bootDiskName;
