@@ -118,8 +118,11 @@ As on the hardware, the input passes through voice 7's filter (the input filter)
 Click **Editor** (by the disk drive) to show every parameter of the selected half on one
 page in place of the on-screen keyboard: the program (27–38), both envelopes with graphs
 (40–59), and the selected wavesample (60–72) with its waveform. Drag a bar to change a
-value, or use the scroll wheel for single steps; click a switch to flip it; drag the white
-lines on the waveform to move the loop. **Lower/Upper**, **Program 1–4** and
+value, or use the scroll wheel for single steps; click a switch to flip it. On the
+waveform, drag the red **S** and **E** markers (upper half) to set the sample start and end,
+and the white **L** markers (lower half) to move the loop. The view shows a margin around
+the sample, dimmed, so the markers have room to move; the Mirage moves the loop to the new
+end when the sample's end changes, as it does on the front panel. **Lower/Upper**, **Program 1–4** and
 **Wavesample 1–8** select what you edit (and play), as the Mirage's own keys do. The
 **keymap** under the program shows which wavesample plays which keys in the selected
 program (starting from its initial wavesample, ▸): click a band to select that

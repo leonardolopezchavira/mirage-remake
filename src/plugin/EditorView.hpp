@@ -108,10 +108,14 @@ public:
                 if (x >= edgeAfter(b.first - 1) && x < edgeAfter(b.last)) { link_.selectWavesample(h, b.ws); return true; }
             return true;
         }
-        // loop markers on the waveform
-        if (x >= kWave.x && x <= kWave.x + kWave.w && y >= kWave.y && y <= kWave.y + kWave.h) {
-            const float ls = pageX(link_.value(h, 62)), le = pageX(link_.value(h, 63) + 1);
-            dragMarker_ = std::fabs(x - ls) < std::fabs(x - le) ? 62 : 63;
+        // waveform markers: the upper half grabs the sample start / end, the lower half the loop
+        if (x >= kWave.x - 6 && x <= kWave.x + kWave.w + 6 && y >= kWave.y && y <= kWave.y + kWave.h) {
+            const bool top = y < kWave.y + kWave.h / 2;
+            const int a = top ? 60 : 62, b = top ? 61 : 63;
+            const float xa = pageX(link_.value(h, a)), xb = pageX(link_.value(h, b) + 1);
+            const float da = std::fabs(x - xa), db = std::fabs(x - xb);
+            if (std::min(da, db) > 12) return true;
+            dragMarker_ = da < db ? a : b;
             dragMarkerTo(x);
             return true;
         }
@@ -230,23 +234,44 @@ private:
     }
 
     // waveform view: the wavesample's pages, sample start to sample end
-    float pageX(int page) const
+    // Waveform view: the sample (start to end) with a margin on each side, so the start and end
+    // markers have room to move. The view stays put while a marker is dragged.
+    mutable int viewFirst_ = 0, viewLast_ = 256;   // pages, last exclusive
+
+    void updateView() const
     {
+        if (dragMarker_) return;
         const int h = link_.currentHalf();
-        const int s = link_.value(h, 60), e = link_.value(h, 61) + 1;
-        if (e <= s) return kWave.x;
-        return kWave.x + kWave.w * float(page - s) / float(e - s);
+        const int s = link_.value(h, 60), e = std::max(s + 1, link_.value(h, 61) + 1);
+        const int pad = std::max(2, (e - s) / 4);
+        viewFirst_ = std::max(0, s - pad);
+        viewLast_ = std::min(256, e + pad);
     }
 
+    float pageX(int page) const
+    {
+        return kWave.x + kWave.w * float(page - viewFirst_) / float(std::max(1, viewLast_ - viewFirst_));
+    }
+
+    int pageAt(float x) const
+    {
+        return viewFirst_ + int(std::lround((x - kWave.x) / kWave.w * float(viewLast_ - viewFirst_)));
+    }
+
+    // Markers: 60 sample start and 61 sample end (tags at the top), 62 loop start and 63 loop end
+    // (tags at the bottom). End markers sit at the end of their page.
     void dragMarkerTo(float x)
     {
         const int h = link_.currentHalf();
-        const int s = link_.value(h, 60), e = link_.value(h, 61) + 1;
-        int page = s + int(std::lround((x - kWave.x) / kWave.w * float(e - s)));
-        if (dragMarker_ == 63) page -= 1;                   // the marker sits at the page's end
-        page = std::clamp(page, s, e - 1);
-        if (dragMarker_ == 62) page = std::min(page, link_.value(h, 63));
-        else page = std::max(page, link_.value(h, 62));
+        const int s = link_.value(h, 60), e = link_.value(h, 61);
+        int page = pageAt(x);
+        switch (dragMarker_) {
+        case 60: page = std::clamp(page, 0, std::min(e, 254)); break;
+        case 61: page = std::clamp(page - 1, std::max(s, 1), 255); break;
+        case 62: page = std::clamp(page, s, std::min(e, link_.value(h, 63))); break;
+        case 63: page = std::clamp(page - 1, std::max(s, link_.value(h, 62)), e); break;
+        default: return;
+        }
         if (page != link_.value(h, dragMarker_)) link_.setParam(h, dragMarker_, page);
     }
 
@@ -569,11 +594,11 @@ private:
     {
         g.beginPath(); g.roundedRect(x, y, w, hgt, 3); g.fillColor(Color(12, 13, 15)); g.fill();
         if (!link_.connected()) return;
+        updateView();
         const int h = link_.currentHalf();
         const int s = link_.value(h, 60), e = link_.value(h, 61) + 1;
-        if (e <= s) return;
         const uint8_t* ram = engine_.machine().sampleRam() + (size_t(h) << 16);
-        const float mid = y + hgt / 2, amp = hgt / 2 - 4;
+        const float mid = y + hgt / 2, amp = hgt / 2 - 14;
 
         // loop region
         const bool loop = link_.value(h, 65) != 0;
@@ -581,25 +606,38 @@ private:
         g.beginPath(); g.rect(ls, y + 1, std::max(1.0f, le - ls), hgt - 2);
         g.fillColor(loop ? Color(240, 180, 60, 0.16f) : Color(120, 120, 120, 0.10f)); g.fill();
 
-        const int first = s * 256, last = std::min(e * 256, 65536);
+        // waveform over the whole view; outside start..end it is dimmed
+        const int first = viewFirst_ * 256, last = viewLast_ * 256;
         const int cols = int(w);
-        g.beginPath();
-        for (int c = 0; c < cols; ++c) {
-            const int i0 = first + int(int64_t(last - first) * c / cols);
-            const int i1 = std::max(i0 + 1, first + int(int64_t(last - first) * (c + 1) / cols));
-            int lo = 255, hi = 0;
-            for (int i = i0; i < i1 && i < 65536; ++i) { lo = std::min(lo, int(ram[i])); hi = std::max(hi, int(ram[i])); }
-            const float y0 = mid - (hi - 128) / 128.0f * amp, y1 = mid - (lo - 128) / 128.0f * amp;
-            g.rect(x + c, y0, 1, std::max(1.0f, y1 - y0));
+        const float xs = pageX(s), xe = pageX(e);
+        for (int pass = 0; pass < 2; ++pass) {
+            g.beginPath();
+            for (int c = 0; c < cols; ++c) {
+                const bool inside = x + c >= xs && x + c < xe;
+                if (inside != (pass == 1)) continue;
+                const int i0 = first + int(int64_t(last - first) * c / cols);
+                const int i1 = std::max(i0 + 1, first + int(int64_t(last - first) * (c + 1) / cols));
+                int lo = 255, hi = 0;
+                for (int i = i0; i < i1 && i < 65536; ++i) { lo = std::min(lo, int(ram[i])); hi = std::max(hi, int(ram[i])); }
+                const float y0 = mid - (hi - 128) / 128.0f * amp, y1 = mid - (lo - 128) / 128.0f * amp;
+                g.rect(x + c, y0, 1, std::max(1.0f, y1 - y0));
+            }
+            g.fillColor(pass ? kYellow : Color(110, 92, 52)); g.fill();
         }
-        g.fillColor(kYellow); g.fill();
 
-        // loop markers (white, to stand out from the yellow waveform)
-        for (float mx : {ls, le}) {
-            g.beginPath(); g.rect(mx - 1, y + 1, 2, hgt - 2);
-            g.fillColor(loop ? Color(245, 245, 245) : Color(130, 130, 130)); g.fill();
-        }
-        label(g, x + 6, y + hgt - 9, "drag the white lines to move the loop", 9, kDim, NanoVG::ALIGN_LEFT);
+        // markers with tags: S and E (red, at the top), L (white, at the bottom)
+        auto marker = [&](float mx, Color c, bool tagTop, const char* t) {
+            g.beginPath(); g.rect(mx - 1, y + 1, 2, hgt - 2); g.fillColor(c); g.fill();
+            const float ty = tagTop ? y + 2 : y + hgt - 14;
+            g.beginPath(); g.roundedRect(mx - 6, ty, 12, 12, 2); g.fillColor(c); g.fill();
+            label(g, mx, ty + 6.5f, t, 9, Color(16, 16, 16), NanoVG::ALIGN_CENTER);
+        };
+        const Color loopC = loop ? Color(245, 245, 245) : Color(130, 130, 130);
+        marker(ls, loopC, false, "L");
+        marker(le, loopC, false, "L");
+        marker(xs, Color(232, 60, 50), true, "S");
+        marker(xe, Color(232, 60, 50), true, "E");
+        label(g, x + w - 6, y + hgt + 8, "drag S / E for the sample, L for the loop", 9, kDim, NanoVG::ALIGN_RIGHT);
     }
 };
 
