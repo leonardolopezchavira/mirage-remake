@@ -56,8 +56,8 @@ public:
         section(g, 360, 52, 400, "FILTER ENVELOPE");
         section(g, 360, 248, 400, "AMPLIFIER ENVELOPE");
         section(g, 780, 52, 400, "WAVESAMPLE");
-        envelope(g, 360, 64, 400, 70, 40, Color(240, 180, 60));
-        envelope(g, 360, 260, 400, 70, 50, Color(90, 190, 250));
+        envelope(g, 360, 64, 400, 70, 40, kYellow);
+        envelope(g, 360, 260, 400, 70, 50, kYellow);
         waveform(g, 780, 64, 400, 150);
 
         for (const auto& s : sliders_) slider(g, s, on);
@@ -134,6 +134,7 @@ public:
 private:
     static constexpr float kRowH = 19;
     const Color kDim = Color(150, 154, 162);
+    const Color kYellow = Color(240, 180, 60);
     enum TabKind { TabHalf, TabProgram, TabWave };
     struct Rect { float x, y, w, h; };
     struct Tab { float x, y, w, h; TabKind kind; int index; std::string text; };
@@ -312,7 +313,7 @@ private:
         const bool loop = link_.value(h, 65) != 0;
         const float ls = pageX(link_.value(h, 62)), le = pageX(link_.value(h, 63) + 1);
         g.beginPath(); g.rect(ls, y + 1, std::max(1.0f, le - ls), hgt - 2);
-        g.fillColor(loop ? Color(90, 190, 250, 0.16f) : Color(120, 120, 120, 0.10f)); g.fill();
+        g.fillColor(loop ? Color(240, 180, 60, 0.16f) : Color(120, 120, 120, 0.10f)); g.fill();
 
         const int first = s * 256, last = std::min(e * 256, 65536);
         const int cols = int(w);
@@ -325,14 +326,14 @@ private:
             const float y0 = mid - (hi - 128) / 128.0f * amp, y1 = mid - (lo - 128) / 128.0f * amp;
             g.rect(x + c, y0, 1, std::max(1.0f, y1 - y0));
         }
-        g.fillColor(Color(196, 198, 204)); g.fill();
+        g.fillColor(kYellow); g.fill();
 
-        // loop markers
+        // loop markers (white, to stand out from the yellow waveform)
         for (float mx : {ls, le}) {
             g.beginPath(); g.rect(mx - 1, y + 1, 2, hgt - 2);
-            g.fillColor(loop ? Color(90, 190, 250) : Color(130, 130, 130)); g.fill();
+            g.fillColor(loop ? Color(245, 245, 245) : Color(130, 130, 130)); g.fill();
         }
-        label(g, x + 6, y + hgt - 9, "drag the blue lines to move the loop", 9, kDim, NanoVG::ALIGN_LEFT);
+        label(g, x + 6, y + hgt - 9, "drag the white lines to move the loop", 9, kDim, NanoVG::ALIGN_LEFT);
     }
 };
 

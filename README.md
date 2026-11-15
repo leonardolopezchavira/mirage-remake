@@ -118,7 +118,7 @@ As on the hardware, the input passes through voice 7's filter (the input filter)
 Click **Editor** (by the disk drive) to show every parameter of the selected half on one
 page in place of the on-screen keyboard: the program (27–38), both envelopes with graphs
 (40–59), and the selected wavesample (60–72) with its waveform. Drag a bar to change a
-value, or use the scroll wheel for single steps; click a switch to flip it; drag the blue
+value, or use the scroll wheel for single steps; click a switch to flip it; drag the white
 lines on the waveform to move the loop. **Lower/Upper**, **Program 1–4** and
 **Wavesample 1–8** select what you edit (and play), as the Mirage's own keys do. Values
 appear as the Mirage's display shows them, and edits on the front panel show up in the
